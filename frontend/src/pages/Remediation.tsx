@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ShieldAlert, ShieldCheck, Zap, FileCode, Clock
+  ShieldAlert, ShieldCheck, Activity, FileCode, Clock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
@@ -51,7 +51,7 @@ export const Remediation: React.FC = () => {
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-ambersoft text-amber border border-amber/30">
-              <Zap className="w-4 h-4" />
+              <Activity className="w-4 h-4" />
               <span>Fix Pending Physical Badge Approval</span>
             </span>
           )}
@@ -85,7 +85,7 @@ export const Remediation: React.FC = () => {
             {/* Min-cut & Edge Severance Guarantee */}
             <div className="bg-bg rounded-xl border border-line p-4 text-xs space-y-2">
               <div className="flex items-center gap-2 text-ink font-bold">
-                <Zap className="w-4 h-4 text-amber" />
+                <Activity className="w-4 h-4 text-amber" />
                 <span>Minimum-Cut Graph Theory Guarantee</span>
               </div>
               <p className="text-slate leading-relaxed">

@@ -1,10 +1,24 @@
 import React, { useState } from 'react';
-import { NavLink, Link } from 'react-router-dom';
-import { Shield, Play, RotateCcw, Cpu, Upload } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import {
+  Shield,
+  Play,
+  RotateCcw,
+  Upload,
+  Menu,
+  ChevronDown,
+  Layers,
+  Sparkles,
+  Radio
+} from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ImportScenarioModal } from './ImportScenarioModal';
 
-export const Navbar: React.FC = () => {
+interface NavbarProps {
+  onToggleSidebar?: () => void;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
   const {
     scenarios,
     selectedScenario,
@@ -12,7 +26,8 @@ export const Navbar: React.FC = () => {
     runAnalysis,
     resetAll,
     loading,
-    devices
+    devices,
+    status
   } = useApp();
 
   const [showImportModal, setShowImportModal] = useState(false);
@@ -21,132 +36,118 @@ export const Navbar: React.FC = () => {
   const esp32 = devices.find((d) => d.device_id === 'esp32-console-01');
   const unoq = devices.find((d) => d.device_id === 'unoq-status-01');
 
-  const getPill = (name: string, dev?: typeof esp32) => {
-    let colorClass = 'bg-line text-mute border-line';
-    let dotClass = 'bg-slate/40';
-
-    if (dev) {
-      if (dev.online) {
-        colorClass = 'bg-greensoft text-green border-green/30';
-        dotClass = 'bg-green';
-      } else {
-        colorClass = 'bg-redsoft text-red border-red/30';
-        dotClass = 'bg-red';
-      }
-    }
-
-    return (
-      <Link
-        to="/hardware"
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all hover:opacity-80 whitespace-nowrap flex-shrink-0 ${colorClass}`}
-        title={`View hardware status for ${name}`}
-      >
-        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotClass}`} />
-        <span>{name}</span>
-      </Link>
-    );
-  };
-
-  const navLinks = [
-    { name: 'Overview', path: '/' },
-    { name: 'Remediation', path: '/remediation' },
-    { name: 'Hardware', path: '/hardware' },
-    { name: 'Cards', path: '/cards' },
-    { name: 'Audit', path: '/audit' },
-  ];
+  const currentScenarioObj = scenarios.find((s) => s.id === selectedScenario);
 
   return (
-    <header className="bg-white border-b border-line sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-        {/* Brand & Logo */}
-        <div className="flex items-center gap-4 lg:gap-6 flex-shrink-0">
-          <Link to="/" className="flex items-center gap-2.5 flex-shrink-0">
-            <div className="w-9 h-9 rounded-xl bg-violet flex items-center justify-center text-white shadow-sm flex-shrink-0">
-              <Shield className="w-5 h-5 fill-white/20" />
+    <header className="bg-white border-b border-slate-200/80 sticky top-0 z-50 h-14 select-none">
+      <div className="h-full px-3 sm:px-4 lg:px-6 flex items-center justify-between gap-2 sm:gap-4">
+        {/* Left: Hamburger & Brand */}
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors focus:outline-none"
+            title="Toggle Navigation Menu"
+            aria-label="Toggle navigation"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
+          <Link to="/" className="flex items-center gap-2.5 flex-shrink-0 group">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-xs group-hover:bg-blue-700 transition-colors">
+              <Shield className="w-4 h-4 fill-white/20" />
             </div>
             <div className="flex flex-col justify-center">
-              <div className="flex items-center gap-1.5 whitespace-nowrap">
-                <span className="font-extrabold text-base tracking-tight text-ink whitespace-nowrap">AEGIS-Graph</span>
-                <span className="text-[10px] font-bold bg-violet/10 text-violet px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap">Demo</span>
+              <div className="flex items-center gap-1.5 leading-none">
+                <span className="font-bold text-sm tracking-tight text-slate-900">
+                  AEGIS-Graph
+                </span>
+                <span className="text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/60 px-1.5 py-0.2 rounded tracking-wide">
+                  Console
+                </span>
               </div>
-              <p className="text-[11px] text-mute font-medium leading-none whitespace-nowrap mt-0.5">Cloud Attack Path Analyzer</p>
+              <span className="text-[10px] text-slate-500 font-medium leading-none mt-0.5 hidden sm:inline">
+                Cloud Security Command Center
+              </span>
             </div>
           </Link>
-
-          {/* Navigation Tabs */}
-          <nav className="hidden md:flex items-center gap-1 ml-2 lg:ml-4 flex-shrink-0">
-            {navLinks.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) =>
-                  `px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap ${
-                    isActive
-                      ? 'text-violet bg-violet/10 font-bold'
-                      : 'text-slate hover:text-ink hover:bg-bg'
-                  }`
-                }
-              >
-                {item.name}
-              </NavLink>
-            ))}
-          </nav>
         </div>
 
-        {/* Right Actions: Scenarios, Run, Reset, Device Pills */}
-        <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
-          {/* Scenario Select & Import */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <select
-              value={selectedScenario}
-              onChange={(e) => setSelectedScenario(e.target.value)}
-              disabled={loading}
-              className="bg-bg border border-line rounded-xl px-2.5 py-1.5 text-xs font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-violet/30 cursor-pointer w-44 lg:w-56 truncate"
-              title="Select cloud architecture scenario"
-            >
-              {scenarios.map((sc) => (
-                <option key={sc.id} value={sc.id}>
-                  {sc.display_name}
-                </option>
-              ))}
-            </select>
-
-            <button
-              onClick={() => setShowImportModal(true)}
-              disabled={loading}
-              className="flex items-center gap-1 bg-bg hover:bg-line border border-line hover:border-slate/40 text-slate hover:text-ink font-semibold text-xs px-2.5 py-1.5 rounded-xl transition-all whitespace-nowrap"
-              title="Import custom scenario data (JSON / CloudGoat)"
-            >
-              <Upload className="w-3.5 h-3.5 text-violet" />
-              <span className="hidden sm:inline">Import</span>
-            </button>
+        {/* Center: Google Cloud Style Project / Scenario Selector */}
+        <div className="flex items-center gap-2 flex-1 max-w-xs sm:max-w-md mx-2 sm:mx-4">
+          <div className="relative w-full">
+            <div className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 transition-colors cursor-pointer w-full shadow-2xs">
+              <Layers className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <select
+                value={selectedScenario}
+                onChange={(e) => setSelectedScenario(e.target.value)}
+                disabled={loading}
+                className="bg-transparent font-medium text-slate-800 text-xs w-full focus:outline-none cursor-pointer truncate appearance-none pr-5"
+                title="Select architecture scenario"
+              >
+                {scenarios.map((sc) => (
+                  <option key={sc.id} value={sc.id}>
+                    {sc.display_name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 pointer-events-none" />
+            </div>
           </div>
+        </div>
 
-          {/* Run Analysis Button (Violet) */}
+        {/* Right: Actions & Device Status */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0">
+          {/* Import Button (Google Cloud Secondary Outlined) */}
           <button
+            type="button"
+            onClick={() => setShowImportModal(true)}
+            disabled={loading}
+            className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-xs px-2.5 sm:px-3 py-1.5 rounded-lg transition-colors shadow-2xs whitespace-nowrap"
+            title="Import custom architecture (Terraform or JSON)"
+          >
+            <Upload className="w-3.5 h-3.5 text-blue-600" />
+            <span className="hidden md:inline">Import</span>
+          </button>
+
+          {/* Run Analysis Button (Google Cloud Primary Filled) */}
+          <button
+            type="button"
             onClick={() => runAnalysis()}
             disabled={loading}
-            className="flex items-center gap-1.5 bg-violet hover:bg-violet/90 text-white font-semibold text-xs px-3.5 py-1.5 rounded-xl shadow-sm transition-all disabled:opacity-50 whitespace-nowrap"
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3 sm:px-3.5 py-1.5 rounded-lg shadow-xs transition-colors disabled:opacity-50 whitespace-nowrap"
+            title="Execute attack graph analysis"
           >
             <Play className="w-3.5 h-3.5 fill-white" />
-            <span>Run analysis</span>
+            <span className="hidden sm:inline">Run analysis</span>
+            <span className="sm:hidden">Run</span>
           </button>
 
-          {/* Reset Button (Outline) */}
+          {/* Reset Button */}
           <button
+            type="button"
             onClick={() => resetAll()}
             disabled={loading}
-            className="flex items-center gap-1.5 border border-line hover:border-slate/40 text-slate hover:text-ink font-semibold text-xs px-3 py-1.5 rounded-xl transition-all disabled:opacity-50 whitespace-nowrap"
-            title="Reset system state to idle"
+            className="flex items-center gap-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 p-1.5 rounded-lg transition-colors disabled:opacity-50"
+            title="Reset system state"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Reset</span>
           </button>
 
-          {/* Device status pills */}
-          <div className="flex items-center gap-1.5 pl-2 border-l border-line flex-shrink-0">
-            {getPill('Console', esp32)}
-            {getPill('UNO Q', unoq)}
+          {/* Device Indicator */}
+          <div className="hidden xl:flex items-center gap-2 pl-2 border-l border-slate-200">
+            <Link
+              to="/hardware"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium bg-slate-50 text-slate-700 border border-slate-200/80 hover:bg-slate-100 transition-colors"
+              title="ESP32 Console Hardware Status"
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  esp32?.online ? 'bg-emerald-500' : 'bg-slate-300'
+                }`}
+              />
+              <span>ESP32</span>
+            </Link>
           </div>
         </div>
       </div>
@@ -159,4 +160,3 @@ export const Navbar: React.FC = () => {
     </header>
   );
 };
-

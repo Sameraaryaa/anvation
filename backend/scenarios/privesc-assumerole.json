@@ -126,8 +126,8 @@
       "type": "CAN_READ_DATA",
       "technique": "T1530",
       "difficulty": 1,
-      "fixable": false,
-      "fix": null
+      "fixable": true,
+      "fix": "scope_iam_permissions"
     },
     {
       "from": "privesc-assumerole-starting-role",
@@ -169,7 +169,7 @@
   "remediations": {
     "scope_iam_permissions": {
       "title": "Least-Privilege Scoping on Terraform Resources",
-      "detail": "Restrict broad S3/RDS policies to explicit resource ARNs and enforce IMDSv2 session tokens.",
+      "detail": "Restrict broad policies to explicit resource ARNs (target_cloud_asset) and enforce IMDSv2 session tokens.",
       "removes_edges": [
         [
           "privesc-assumerole-high-priv-policy",

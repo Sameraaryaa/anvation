@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import cytoscape, { Core } from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import {
-  ShieldAlert, ShieldCheck, Zap, Bot, Sparkles, Send, Clock,
-  CheckCircle2, WifiOff
+  ShieldAlert, ShieldCheck, Activity, Bot, Sparkles, Send, Clock,
+  CheckCircle2, WifiOff, Radio, Play, Pause, ArrowRight, CornerDownRight,
+  Layers, Lock, Database, Server, RefreshCw
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
@@ -16,10 +17,70 @@ import { AskResponse } from '../types';
 // Register dagre layout plugin
 cytoscape.use(dagre);
 
+/**
+ * Intelligent text wrapper that cleanly breaks on hyphens, underscores,
+ * colons, slashes, or whitespace, ensuring no line overflows node boxes.
+ */
+function wrapNodeLabel(text: string, maxLen: number = 20): string[] {
+  if (!text) return [];
+  const paragraphs = text.split('\n');
+  const result: string[] = [];
+
+  for (const para of paragraphs) {
+    if (para.length <= maxLen) {
+      result.push(para);
+      continue;
+    }
+
+    // Tokenize preserving separators (hyphens, underscores, dots, colons, spaces)
+    const tokens = para.match(/([^\s\-_:.]+|[\s\-_:.])/g) || [para];
+    let currentLine = '';
+
+    for (const token of tokens) {
+      if ((currentLine + token).length <= maxLen) {
+        currentLine += token;
+      } else {
+        if (currentLine.trim()) {
+          result.push(currentLine.trim());
+          currentLine = token.trimStart();
+        } else {
+          // Token is individually longer than maxLen, chunk by character
+          let remaining = token;
+          while (remaining.length > maxLen) {
+            result.push(remaining.slice(0, maxLen));
+            remaining = remaining.slice(maxLen);
+          }
+          currentLine = remaining;
+        }
+      }
+    }
+    if (currentLine.trim()) {
+      result.push(currentLine.trim());
+    }
+  }
+
+  return result;
+}
+
+interface Packet {
+  sourceId: string;
+  targetId: string;
+  progress: number;
+  speed: number;
+  color: string;
+  pathId: number;
+  isChoke: boolean;
+}
+
 export const Overview: React.FC = () => {
   const { analysis, status, devices, runAnalysis } = useApp();
   const cyRef = useRef<HTMLDivElement>(null);
   const cyInstance = useRef<Core | null>(null);
+  const packetCanvasRef = useRef<HTMLCanvasElement>(null);
+  const animFrameRef = useRef<number | null>(null);
+
+  // Packet animation toggle
+  const [packetsEnabled, setPacketsEnabled] = useState(true);
 
   // Tooltip state for edge hover
   const [tooltip, setTooltip] = useState<{
@@ -95,11 +156,11 @@ export const Overview: React.FC = () => {
 
     const formatMisconfig = (m: string): string => {
       const dict: Record<string, string> = {
-        sg_open_world: '0.0.0.0/0 · SSRF',
-        weak_sandbox: 'public · sandbox esc.',
+        sg_open_world: '0.0.0.0/0 - SSRF',
+        weak_sandbox: 'public - escape',
         key_in_client_code: 'in client code',
         passrole_wildcard: 'iam:PassRole *',
-        ssrf_vulnerable_proxy: '0.0.0.0/0 · SSRF',
+        ssrf_vulnerable_proxy: '0.0.0.0/0 - SSRF',
         tokenless_imds_hop_limit_unrestricted: 'IMDSv1 tokenless',
         s3_wildcard_read: 's3:* read',
         overprivileged_policy: 'AdministratorAccess',
@@ -129,33 +190,35 @@ export const Overview: React.FC = () => {
       let borderColor = '#CBD5E1';
       let borderWidth = 2;
       let borderStyle: cytoscape.Css.LineStyle = 'solid';
-      let textColor = '#12152B';
+      let textColor = '#202124';
 
       const subLines: string[] = [];
 
       if (node.entry) {
         shape = 'ellipse';
-        borderColor = '#DC2626';
+        borderColor = '#D93025';
         borderWidth = 2.5;
-        subLines.push('entry point');
+        bgColor = '#FCE8E6';
+        textColor = '#C5221F';
+        subLines.push('ENTRY POINT');
       } else if (node.crown_jewel) {
         shape = 'round-rectangle';
-        borderColor = '#DC2626';
+        borderColor = '#D93025';
         borderWidth = 2.5;
-        bgColor = '#FEF2F2';
-        textColor = '#991B1B';
+        bgColor = '#FCE8E6';
+        textColor = '#C5221F';
         if (node.sensitivity) {
           subLines.push(formatSensitivity(node.sensitivity));
         }
-        subLines.push('CROWN JEWEL ●');
+        subLines.push('CROWN JEWEL');
       } else if (node.choke) {
         shape = 'round-rectangle';
-        borderColor = '#D97706';
+        borderColor = '#F2990A';
         borderWidth = 3;
-        bgColor = '#FEF3C7';
-        textColor = '#92400E';
+        bgColor = '#FEF7E0';
+        textColor = '#B06000';
         if (node.misconfig && node.misconfig.length > 0) {
-          subLines.push(node.misconfig.map(formatMisconfig).join(' · '));
+          subLines.push(node.misconfig.map(formatMisconfig).join(' | '));
         }
         if (node.name_ref) {
           subLines.push(node.name_ref);
@@ -165,7 +228,7 @@ export const Overview: React.FC = () => {
       } else {
         // Normal intermediate or blast radius nodes
         if (node.misconfig && node.misconfig.length > 0) {
-          subLines.push(node.misconfig.map(formatMisconfig).join(' · '));
+          subLines.push(node.misconfig.map(formatMisconfig).join(' | '));
         } else if (node.privilege) {
           subLines.push(node.privilege === 'admin' ? 'full access' : `privilege: ${node.privilege}`);
         } else if (node.name_ref) {
@@ -178,77 +241,76 @@ export const Overview: React.FC = () => {
 
         // Color border according to which attack path traverses it
         if (paths.length === 1) {
-          if (paths[0] === 1) borderColor = '#7C3AED'; // Violet Path 1
-          else if (paths[0] === 2) borderColor = '#2563EB'; // Blue Path 2
+          if (paths[0] === 1) borderColor = '#1A73E8'; // Google Blue Path 1
+          else if (paths[0] === 2) borderColor = '#7C3AED'; // Violet Path 2
           else if (paths[0] === 3) borderColor = '#0891B2'; // Cyan Path 3
-          else borderColor = '#6366F1';
+          else borderColor = '#4F5775';
           borderWidth = 2;
         } else if (paths.length >= 2) {
-          borderColor = '#475569'; // Converging attack path
-          borderWidth = 2;
+          borderColor = '#D93025'; // Converging critical attack path
+          borderWidth = 2.5;
         } else {
           // Off-path / blast radius
           borderColor = '#CBD5E1';
           borderStyle = 'dashed';
           borderWidth = 1.5;
-          textColor = '#64748B';
+          textColor = '#5F6368';
           if (subLines.length === 0) {
             subLines.push('blast radius');
           }
         }
       }
 
-      // Compose full label
-      let fullLabel = primaryTitle;
+      // Format lines with word wrap so text NEVER overflows node box
+      const wrappedTitle = wrapNodeLabel(primaryTitle, 20);
+      const allLines: string[] = [];
+
       if (node.choke) {
-        fullLabel = `CHOKE POINT\n${primaryTitle}`;
-        if (subLines.length > 0) {
-          fullLabel += `\n${subLines.join('\n')}`;
-        }
-      } else if (subLines.length > 0) {
-        fullLabel = `${primaryTitle}\n${subLines.join('\n')}`;
+        allLines.push('CHOKE POINT');
+      }
+      allLines.push(...wrappedTitle);
+      for (const s of subLines) {
+        allLines.push(...wrapNodeLabel(s, 20));
       }
 
-      // Calculate dynamic dimensions so text never overflows the box
-      const lines = fullLabel.split('\n');
-      const maxLineLen = Math.max(...lines.map((l) => l.length), 0);
-      const lineCount = lines.length;
+      const fullLabel = allLines.join('\n');
+      const maxLineLen = Math.max(...allLines.map((l) => l.length), 0);
+      const lineCount = allLines.length;
 
-      let width = 160;
-      let height = 68;
+      let width = 170;
+      let height = 72;
 
       if (node.entry) {
         shape = 'ellipse';
-        borderColor = '#DC2626';
+        borderColor = '#D93025';
         borderWidth = 2.5;
-        width = 96;
-        height = 96;
+        width = 100;
+        height = 100;
       } else {
-        // Dynamic card width and height to comfortably enclose multi-line or long labels
-        width = Math.max(160, Math.min(320, Math.round(maxLineLen * 8.2 + 36)));
-        height = Math.max(68, lineCount * 19 + 24);
+        // Generous box padding: character width ~8.5px + 48px padding
+        width = Math.max(170, Math.min(340, Math.round(maxLineLen * 8.6 + 48)));
+        height = Math.max(72, lineCount * 19 + 32);
 
         if (node.crown_jewel) {
           shape = 'round-rectangle';
-          borderColor = '#DC2626';
+          borderColor = '#D93025';
           borderWidth = 2.5;
-          bgColor = '#FEF2F2';
-          textColor = '#991B1B';
-          width = Math.max(width, 168);
-          height = Math.max(height, 74);
+          bgColor = '#FCE8E6';
+          textColor = '#C5221F';
+          width = Math.max(width, 180);
+          height = Math.max(height, 80);
         } else if (node.choke) {
           shape = 'round-rectangle';
-          borderColor = '#D97706';
+          borderColor = '#F2990A';
           borderWidth = 3;
-          bgColor = '#FEF3C7';
-          textColor = '#92400E';
-          width = Math.max(width, 178);
-          height = Math.max(height, 86);
+          bgColor = '#FEF7E0';
+          textColor = '#B06000';
+          width = Math.max(width, 190);
+          height = Math.max(height, 90);
         }
       }
 
-      const textMaxWidth = Math.max(width - 20, 80);
-
+      const textMaxWidth = Math.max(width - 24, 100);
       const opacity = analysis.applied && !node.reachable ? 0.35 : 1.0;
 
       elements.push({
@@ -296,20 +358,18 @@ export const Overview: React.FC = () => {
         lineColor = '#94A3B8';
         label = 'fixed';
       } else if (edge.paths.length >= 2) {
-        // Shared attack route on 2+ paths
-        lineColor = '#DC2626';
-        width = 4;
+        lineColor = '#D93025';
+        width = 3.5;
       } else if (edge.paths.includes(1)) {
-        lineColor = '#7C3AED'; // Path 1 Violet
+        lineColor = '#1A73E8'; // Google Blue
         width = 2.5;
       } else if (edge.paths.includes(2)) {
-        lineColor = '#2563EB'; // Path 2 Blue
+        lineColor = '#7C3AED';
         width = 2.5;
       } else if (edge.paths.includes(3)) {
-        lineColor = '#0891B2'; // Path 3 Cyan
+        lineColor = '#0891B2';
         width = 2.5;
       } else {
-        // Non-path edge (blast radius only)
         lineStyle = 'dashed';
         lineColor = '#CBD5E1';
       }
@@ -357,7 +417,7 @@ export const Overview: React.FC = () => {
             'text-halign': 'center',
             'text-wrap': 'wrap',
             'text-max-width': 'data(textMaxWidth)' as any,
-            'line-height': 1.25,
+            'line-height': 1.3,
             'text-justification': 'center',
             'shape': 'data(shape)' as any,
             'width': 'data(width)' as any,
@@ -368,7 +428,7 @@ export const Overview: React.FC = () => {
             'border-style': 'data(borderStyle)' as any,
             'color': 'data(textColor)',
             'opacity': 'data(opacity)' as any,
-            'padding': '8px',
+            'padding': '10px',
             'transition-property': 'background-color, border-color, opacity',
             'transition-duration': 300,
           },
@@ -383,16 +443,15 @@ export const Overview: React.FC = () => {
       layout: {
         name: 'dagre',
         rankDir: 'LR',
-        nodeSep: 45,
-        rankSep: 95,
-        padding: 35,
+        nodeSep: 55,
+        rankSep: 110,
+        padding: 40,
       } as any,
-      wheelSensitivity: 0.2, // Prevent sensitivity spikes
+      wheelSensitivity: 0.2,
       maxZoom: 2.0,
-      minZoom: 0.4,
+      minZoom: 0.35,
     });
 
-    // Fit to view on load
     cy.ready(() => {
       cy.fit(undefined, 35);
     });
@@ -419,34 +478,172 @@ export const Overview: React.FC = () => {
     return () => {
       if (cyInstance.current) {
         cyInstance.current.destroy();
+        cyInstance.current = null;
       }
     };
   }, [analysis]);
 
-  // Sentinel submit handler
-  const handleAskSentinel = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  // Animated Telemetry & Attack Packets Loop
+  useEffect(() => {
+    if (!analysis || !packetCanvasRef.current) return;
+    const canvas = packetCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Build active packets along paths
+    const packets: Packet[] = [];
+    const activePaths = analysis.paths || [];
+
+    if (activePaths.length > 0) {
+      activePaths.forEach((p) => {
+        for (let i = 0; i < p.nodes.length - 1; i++) {
+          const u = p.nodes[i];
+          const v = p.nodes[i + 1];
+          const isChoke = analysis.choke_point?.id === u || analysis.choke_point?.id === v;
+          const color = analysis.applied
+            ? '#1E8E3E' // Google Green
+            : isChoke
+            ? '#F2990A' // Google Amber
+            : p.id === 1
+            ? '#D93025' // Google Red
+            : '#1A73E8'; // Google Blue
+
+          // 2 packets per active edge, staggered
+          packets.push({
+            sourceId: u,
+            targetId: v,
+            progress: (i * 0.25) % 1.0,
+            speed: 0.009 + (p.id * 0.002),
+            color,
+            pathId: p.id,
+            isChoke,
+          });
+          packets.push({
+            sourceId: u,
+            targetId: v,
+            progress: ((i * 0.25) + 0.5) % 1.0,
+            speed: 0.009 + (p.id * 0.002),
+            color,
+            pathId: p.id,
+            isChoke,
+          });
+        }
+      });
+    }
+
+    let isRunning = true;
+
+    const renderPackets = () => {
+      if (!isRunning) return;
+
+      const cy = cyInstance.current;
+      if (!cy || !packetsEnabled) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        animFrameRef.current = requestAnimationFrame(renderPackets);
+        return;
+      }
+
+      // Ensure canvas matches container dimensions
+      if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      packets.forEach((pkt) => {
+        pkt.progress += pkt.speed;
+        if (pkt.progress > 1.0) pkt.progress = 0;
+
+        const nodeU = cy.getElementById(pkt.sourceId);
+        const nodeV = cy.getElementById(pkt.targetId);
+
+        if (!nodeU || !nodeV || nodeU.length === 0 || nodeV.length === 0) return;
+
+        const posU = nodeU.renderedPosition();
+        const posV = nodeV.renderedPosition();
+
+        const x = posU.x + (posV.x - posU.x) * pkt.progress;
+        const y = posU.y + (posV.y - posU.y) * pkt.progress;
+
+        // Draw packet halo
+        ctx.save();
+        ctx.shadowColor = pkt.color;
+        ctx.shadowBlur = 8;
+
+        // Core dot
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Glowing outer pulse ring
+        ctx.strokeStyle = pkt.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Trail dot
+        const trailX = x - (posV.x - posU.x) * 0.04;
+        const trailY = y - (posV.y - posU.y) * 0.04;
+        ctx.fillStyle = pkt.color;
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.arc(trailX, trailY, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      });
+
+      animFrameRef.current = requestAnimationFrame(renderPackets);
+    };
+
+    animFrameRef.current = requestAnimationFrame(renderPackets);
+
+    return () => {
+      isRunning = false;
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+      }
+    };
+  }, [analysis, packetsEnabled]);
+
+  const handleAskSentinel = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!question.trim()) return;
 
     setSentinelLoading(true);
     try {
       const res = await api.askSentinel(question);
       setSentinelAnswer(res);
-    } catch (err: any) {
-      console.error(err);
+    } catch {
+      setSentinelAnswer({
+        answer: 'Failed to contact Sentinel engine.',
+        grounded: false,
+        cited: [],
+        mode: 'template',
+        model: 'gemini-2.5-flash-lite',
+      });
     } finally {
       setSentinelLoading(false);
     }
   };
 
-  const askPreset = async (q: string) => {
-    setQuestion(q);
+  const askPreset = async (promptText: string) => {
+    setQuestion(promptText);
     setSentinelLoading(true);
     try {
-      const res = await api.askSentinel(q);
+      const res = await api.askSentinel(promptText);
       setSentinelAnswer(res);
-    } catch (err: any) {
-      console.error(err);
+    } catch {
+      setSentinelAnswer({
+        answer: 'Failed to query Sentinel.',
+        grounded: false,
+        cited: [],
+        mode: 'template',
+        model: 'gemini-2.5-flash-lite',
+      });
     } finally {
       setSentinelLoading(false);
     }
@@ -460,98 +657,137 @@ export const Overview: React.FC = () => {
     );
   }
 
-  const pfix = analysis.recommended_fixes[0];
-  const activePaths = analysis.applied ? (analysis.paths_before || []) : analysis.paths;
+  const pfix = analysis.recommended_fixes?.[0];
+  const activePaths = analysis.paths || [];
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-      {/* Top Banner: Scenario Title & Status Overview */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-line">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] mx-auto">
+      {/* Header Bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200/80">
         <div>
-          <h1 className="text-2xl font-extrabold text-ink tracking-tight flex items-center gap-2">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Security Command Center
+            </span>
+            <span className="text-slate-300">/</span>
+            <span className="text-xs font-semibold text-blue-600">
+              Attack Graph Intelligence
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
             <span>{analysis.display_name}</span>
             {analysis.applied ? (
-              <span className="inline-flex items-center gap-1 text-xs font-bold bg-greensoft text-green px-2.5 py-0.5 rounded-full border border-green/20">
-                <ShieldCheck className="w-3.5 h-3.5" /> SYSTEM SAFE
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> SYSTEM SAFE
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-bold bg-redsoft text-red px-2.5 py-0.5 rounded-full border border-red/20">
-                <ShieldAlert className="w-3.5 h-3.5" /> UNSAFE · PATHS OPEN
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-rose-50 text-rose-700 px-2.5 py-0.5 rounded-full border border-rose-200">
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-600" /> OPEN ATTACK VECTORS
               </span>
             )}
           </h1>
-          <p className="text-xs text-mute mt-0.5">
-            Directed acyclic attack graph · entry to crown jewel simple paths with immediate dominator cut
+          <p className="text-xs text-slate-500 mt-0.5">
+            Directed acyclic graph representation showing entry-to-crown-jewel threat vectors and minimum-cut choke point
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate">Choke point:</span>
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-ambersoft text-amber border border-amber/30">
-            <Zap className="w-3.5 h-3.5" />
-            {analysis.choke_point ? analysis.choke_point.label : 'None'}
-          </span>
+        {/* Choke Point & Status Pill */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200/80 text-xs font-semibold text-amber-800">
+            <Activity className="w-3.5 h-3.5 text-amber-600" />
+            <span>Choke Point:</span>
+            <span className="font-bold underline decoration-amber-400">
+              {analysis.choke_point ? analysis.choke_point.label : 'None'}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Main Grid: Graph (left) | Side Panel (right 380px) */}
+      {/* Main Grid: Attack Graph (Left) & Security Analytics (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left: Cytoscape Attack Graph (~65%) */}
-        <div className="lg:col-span-8 bg-card border border-line rounded-card shadow-card overflow-hidden flex flex-col h-[640px] relative">
-          <div className="px-4 py-3 border-b border-line bg-white/80 backdrop-blur flex items-center justify-between">
+        {/* Left: Cytoscape Attack Graph with Packet Overlay */}
+        <div className="lg:col-span-8 bg-white border border-slate-200/80 rounded-xl shadow-xs overflow-hidden flex flex-col h-[650px] relative">
+          {/* Graph Header Bar */}
+          <div className="px-4 py-2.5 border-b border-slate-200/80 bg-slate-50/80 backdrop-blur flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate">Attack Path Graph</span>
-              <span className="text-[11px] text-mute font-mono">Dagre Left-to-Right</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Attack Topology
+              </span>
+              <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">
+                Dagre Directed Flow
+              </span>
             </div>
-            {/* Legend */}
-            <div className="flex items-center gap-3 text-[11px] font-semibold text-mute">
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full border border-red bg-red/10" /> Entry
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded bg-ambersoft border border-amber" /> Choke
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded bg-redsoft border border-red" /> Jewel
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-0.5 bg-red" /> Shared Route
-              </span>
+
+            {/* Packets Toggle & Legend */}
+            <div className="flex items-center gap-3 text-xs font-medium text-slate-600">
+              {/* Animated Packets Toggle */}
+              <button
+                type="button"
+                onClick={() => setPacketsEnabled(!packetsEnabled)}
+                className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-all ${
+                  packetsEnabled
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : 'bg-slate-100 text-slate-500 border-slate-200'
+                }`}
+                title="Toggle live animated attack packet visualization"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${packetsEnabled ? 'bg-blue-600 animate-ping' : 'bg-slate-400'}`} />
+                <span>Packets: {packetsEnabled ? 'Streaming' : 'Paused'}</span>
+              </button>
+
+              {/* Legend */}
+              <div className="hidden md:flex items-center gap-2.5 text-[11px] text-slate-500">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full border border-rose-500 bg-rose-100" /> Entry
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded bg-amber-100 border border-amber-500" /> Choke
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded bg-rose-100 border border-rose-500" /> Crown Jewel
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Graph Canvas */}
-          <div ref={cyRef} className="w-full flex-1 bg-[#FAFAFC]" />
+          {/* Graph Canvas Container with Packet Overlay */}
+          <div className="w-full flex-1 bg-[#FAFAFC] relative overflow-hidden">
+            <div ref={cyRef} className="w-full h-full absolute inset-0" />
+            <canvas
+              ref={packetCanvasRef}
+              className="w-full h-full absolute inset-0 pointer-events-none z-10"
+            />
+          </div>
 
           {/* Floating Tooltip */}
           {tooltip.visible && tooltip.content && (
             <div
-              className="absolute z-30 pointer-events-none bg-white border border-line rounded-xl shadow-lg p-3 text-xs w-64 transform -translate-x-1/2 -translate-y-full mb-2"
+              className="absolute z-30 pointer-events-none bg-white border border-slate-200 rounded-lg shadow-md p-3 text-xs w-64 transform -translate-x-1/2 -translate-y-full mb-2"
               style={{ left: tooltip.x, top: tooltip.y }}
             >
-              <div className="font-bold text-ink mb-1 flex items-center justify-between">
+              <div className="font-bold text-slate-900 mb-1 flex items-center justify-between">
                 <span>{tooltip.content.type || 'Connection'}</span>
-                <span className="text-violet font-mono">{tooltip.content.technique || 'T1000'}</span>
+                <span className="text-blue-600 font-mono">{tooltip.content.technique || 'T1000'}</span>
               </div>
-              <div className="text-slate text-[11px] space-y-0.5">
-                <div>Difficulty: <b className="text-ink">{tooltip.content.difficulty}</b></div>
+              <div className="text-slate-600 text-[11px] space-y-0.5">
+                <div>Difficulty: <b className="text-slate-900">{tooltip.content.difficulty}</b></div>
                 {tooltip.content.fix && (
-                  <div>Fix available: <b className="text-green">{tooltip.content.fix}</b></div>
+                  <div>Fix available: <b className="text-emerald-600">{tooltip.content.fix}</b></div>
                 )}
                 {tooltip.content.paths?.length > 0 && (
-                  <div>Traversed by paths: <b className="text-ink">{tooltip.content.paths.join(', ')}</b></div>
+                  <div>Traversed by: <b className="text-slate-900">Path #{tooltip.content.paths.join(', #')}</b></div>
                 )}
               </div>
             </div>
           )}
         </div>
 
-        {/* Right: Side Panel (380px) */}
+        {/* Right: Security Analytics & Fix Panel */}
         <div className="lg:col-span-4 space-y-4">
-          {/* Risk Score & Blast Radius Tiles */}
+          {/* Stat Tiles */}
           <div className="grid grid-cols-2 gap-3">
             <StatTile
-              label="Overall Risk"
+              label="Risk Metric"
               value={analysis.applied ? analysis.after.risk : analysis.before.risk}
               max={100}
               showBar
@@ -573,36 +809,40 @@ export const Overview: React.FC = () => {
             />
           </div>
 
-          {/* Smallest Fix Card (Amber) */}
-          <Card className="border-amber/40 bg-gradient-to-b from-ambersoft/40 to-white">
+          {/* Recommended Min-Cut Fix Card */}
+          <Card className="border-amber-200/80 bg-gradient-to-b from-amber-50/50 to-white p-4">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-lg bg-amber text-white flex items-center justify-center">
-                <Zap className="w-4 h-4 fill-white" />
+              <div className="w-7 h-7 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
+                1
               </div>
               <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-amber">Recommended Min-Cut Fix</h3>
-                <p className="text-sm font-extrabold text-ink leading-tight">1 fix breaks all {analysis.before.path_count} paths</p>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800">
+                  Recommended Remediation
+                </h3>
+                <p className="text-xs font-semibold text-slate-800">
+                  Breaks all {analysis.before.path_count} attack path(s) at choke point
+                </p>
               </div>
             </div>
 
             {pfix && (
-              <div className="mt-2 p-3 bg-white border border-amber/20 rounded-xl space-y-1">
-                <div className="font-bold text-xs text-ink">{pfix.title}</div>
-                <p className="text-xs text-slate">{pfix.detail}</p>
-                <div className="pt-2 text-[11px] font-mono text-mute flex items-center gap-1">
-                  <span>Removes:</span>
-                  <span className="text-ink font-semibold">
-                    {pfix.removes_edges.map(([u, v]) => `${u} → ${v}`).join(', ')}
+              <div className="mt-2 p-3 bg-white border border-amber-200/80 rounded-lg space-y-1 shadow-2xs">
+                <div className="font-bold text-xs text-slate-900">{pfix.title}</div>
+                <p className="text-xs text-slate-600 leading-snug">{pfix.detail}</p>
+                <div className="pt-1.5 text-[11px] font-mono text-slate-500 flex items-center gap-1">
+                  <span>Severed:</span>
+                  <span className="text-slate-900 font-semibold">
+                    {pfix.removes_edges.map(([u, v]) => `${u} -> ${v}`).join(', ')}
                   </span>
                 </div>
               </div>
             )}
 
-            {/* Approval Status Line */}
-            <div className="mt-3 pt-3 border-t border-amber/20 text-xs">
+            {/* Approval Hardware Status */}
+            <div className="mt-3 pt-2.5 border-t border-amber-200/60 text-xs">
               {analysis.applied ? (
-                <div className="flex items-center gap-2 text-green font-semibold">
-                  <CheckCircle2 className="w-4 h-4 text-green" />
+                <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>
                     Approved by {approvalInfo?.approver || 'Security Lead'}
                     {approvalInfo?.time ? ` at ${approvalInfo.time}` : ''}
@@ -610,68 +850,72 @@ export const Overview: React.FC = () => {
                 </div>
               ) : status?.pending_fix ? (
                 consoleOnline ? (
-                  <div className="flex items-center gap-2 text-amber font-semibold">
+                  <div className="flex items-center gap-2 text-amber-700 font-semibold">
                     <span className="relative flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
                     </span>
-                    <span>Waiting for an authorised badge on the console (esp32-console-01)</span>
+                    <span>Waiting for badge tap on physical console (esp32-console-01)</span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 text-red font-semibold">
-                    <WifiOff className="w-4 h-4 text-red" />
-                    <span>Console offline — approval unavailable</span>
+                  <div className="flex items-center gap-2 text-rose-700 font-semibold">
+                    <WifiOff className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Console offline - verify ESP32 Wi-Fi connection</span>
                   </div>
                 )
               ) : (
-                <span className="text-slate">No fix pending approval.</span>
+                <span className="text-slate-500">No fix pending approval.</span>
               )}
             </div>
           </Card>
 
           {/* Attack Paths List */}
           <Card className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate">
-                Attack Paths ({activePaths.length})
+            <div className="flex items-center justify-between mb-2.5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Discovered Vectors ({activePaths.length})
               </h3>
               {analysis.applied && (
-                <span className="text-[11px] font-semibold text-green">All Severed ✓</span>
+                <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> All Severed
+                </span>
               )}
             </div>
 
-            <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
               {activePaths.map((p, idx) => {
-                const colorChips = ['bg-violet text-white', 'bg-blue text-white', 'bg-cyan text-white'];
-                const chipColor = colorChips[idx % colorChips.length];
+                const colors = ['bg-blue-600', 'bg-purple-600', 'bg-cyan-600'];
+                const badgeBg = colors[idx % colors.length];
 
                 return (
                   <div
                     key={p.id}
-                    className={`p-2.5 rounded-xl border text-xs transition-colors ${
-                      analysis.applied ? 'border-line bg-bg opacity-70' : 'border-line hover:border-slate/40 bg-white'
+                    className={`p-2.5 rounded-lg border text-xs transition-colors ${
+                      analysis.applied ? 'border-slate-200 bg-slate-50/70 opacity-70' : 'border-slate-200 hover:border-slate-300 bg-white'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-1.5">
-                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${chipColor}`}>
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${badgeBg}`}>
                           {p.id}
                         </span>
-                        <span className="font-bold text-ink">Path {p.id}</span>
+                        <span className="font-semibold text-slate-900">Path #{p.id}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-mute font-mono">diff {p.difficulty} · {p.hops} hops</span>
+                        <span className="text-[11px] text-slate-500 font-mono">
+                          diff {p.difficulty} - {p.hops} hops
+                        </span>
                         <SeverityBadge severity={p.severity} />
                       </div>
                     </div>
 
-                    <div className="font-mono text-[11px] text-slate break-words flex items-center flex-wrap gap-1 leading-snug">
+                    <div className="font-mono text-[11px] text-slate-600 break-words flex items-center flex-wrap gap-1 leading-snug">
                       {p.nodes.map((nodeId, nIdx) => (
                         <React.Fragment key={nIdx}>
-                          <span className={nodeId === 'role_overpriv' ? 'text-amber font-bold' : nodeId === 'db_parent_portal' ? 'text-red font-bold' : ''}>
+                          <span className={nodeId === analysis.choke_point?.id ? 'text-amber-700 font-bold bg-amber-50 px-1 rounded' : ''}>
                             {nodeId}
                           </span>
-                          {nIdx < p.nodes.length - 1 && <span className="text-mute">&rarr;</span>}
+                          {nIdx < p.nodes.length - 1 && <span className="text-slate-400">{'->'}</span>}
                         </React.Fragment>
                       ))}
                     </div>
@@ -683,166 +927,104 @@ export const Overview: React.FC = () => {
         </div>
       </div>
 
-      {/* Bottom Row: Sentinel Panel + Before/After Comparison Card */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Sentinel Assistant Panel (7 cols) */}
-        <Card className="lg:col-span-7 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-line">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-violet/10 text-violet flex items-center justify-center">
-                  <Bot className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-ink">Sentinel AI Assistant</h3>
-                  <p className="text-[11px] text-mute">Read-only, grounded in graph facts</p>
-                </div>
-              </div>
-
-              {sentinelAnswer && (
-                <div className="flex items-center gap-1.5">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-greensoft text-green px-2 py-0.5 rounded-full border border-green/20">
-                    <Sparkles className="w-3 h-3" /> Grounded in graph
-                  </span>
-                  <span className="text-[10px] font-mono text-mute bg-line px-1.5 py-0.5 rounded">
-                    {sentinelAnswer.mode}
-                  </span>
-                </div>
-              )}
+      {/* Sentinel AI Assistant (Google Gemini Style) */}
+      <Card className="p-5 border-slate-200/80 bg-white shadow-xs">
+        <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-200/80">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center justify-center shadow-2xs">
+              <Sparkles className="w-4 h-4" />
             </div>
-
-            {/* Answer Display */}
-            {sentinelAnswer ? (
-              <div className="p-3 bg-bg rounded-xl border border-line mb-4 text-xs leading-relaxed text-ink">
-                <p className="font-medium">{sentinelAnswer.answer}</p>
-                {sentinelAnswer.cited?.length > 0 && (
-                  <div className="mt-2.5 pt-2 border-t border-line/60 flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] text-mute font-semibold">Cited Resources:</span>
-                    {sentinelAnswer.cited.map((token) => (
-                      <span key={token} className="text-[10px] font-mono bg-white border border-line px-1.5 py-0.5 rounded text-violet font-semibold">
-                        {token}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="py-2 mb-2 text-xs text-mute flex items-center gap-2">
-                <span>Ask questions about attack paths, choke points, or remediations. Try:</span>
-              </div>
-            )}
-
-            {/* Suggested Prompts */}
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              <button
-                type="button"
-                onClick={() => askPreset('How can an attacker reach the parent portal database?')}
-                className="text-[11px] font-medium bg-bg hover:bg-line text-slate hover:text-ink px-2.5 py-1 rounded-lg border border-line transition-colors"
-              >
-                Attack path to DB?
-              </button>
-              <button
-                type="button"
-                onClick={() => askPreset('What is the choke point and how does the fix resolve it?')}
-                className="text-[11px] font-medium bg-bg hover:bg-line text-slate hover:text-ink px-2.5 py-1 rounded-lg border border-line transition-colors"
-              >
-                Choke point explanation
-              </button>
-              <button
-                type="button"
-                onClick={() => askPreset('What is the blast radius reduction?')}
-                className="text-[11px] font-medium bg-bg hover:bg-line text-slate hover:text-ink px-2.5 py-1 rounded-lg border border-line transition-colors"
-              >
-                Blast radius reduction
-              </button>
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                Sentinel AI Security Copilot
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Grounded in mathematical graph proofs and IAM policies (Gemini 2.5 Flash Lite)
+              </p>
             </div>
           </div>
 
-          {/* Ask Input Form */}
-          <form onSubmit={handleAskSentinel} className="flex gap-2">
-            <input
-              type="text"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask Sentinel about this cloud topology..."
-              disabled={sentinelLoading}
-              className="flex-1 bg-bg border border-line rounded-xl px-3 py-2 text-xs text-ink placeholder:text-mute focus:outline-none focus:ring-2 focus:ring-violet/30"
-            />
-            <button
-              type="submit"
-              disabled={sentinelLoading || !question.trim()}
-              className="px-4 py-2 bg-violet hover:bg-violet/90 text-white font-semibold text-xs rounded-xl shadow-sm transition-colors flex items-center gap-1 disabled:opacity-50"
-            >
+          {sentinelAnswer && (
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">
+                <CheckCircle2 className="w-3 h-3" /> Grounded in graph
+              </span>
+              <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                {sentinelAnswer.mode}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Answer Display */}
+        {sentinelAnswer ? (
+          <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 mb-3 text-xs leading-relaxed text-slate-800">
+            <p className="font-medium whitespace-pre-line">{sentinelAnswer.answer}</p>
+            {sentinelAnswer.cited?.length > 0 && (
+              <div className="mt-2.5 pt-2 border-t border-slate-200 flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] text-slate-500 font-semibold">Cited Resources:</span>
+                {sentinelAnswer.cited.map((token) => (
+                  <span key={token} className="text-[10px] font-mono bg-white border border-slate-200 px-1.5 py-0.5 rounded text-blue-700 font-semibold">
+                    {token}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="py-1 mb-2 text-xs text-slate-500">
+            Ask questions about attack paths, choke points, or remediations:
+          </div>
+        )}
+
+        {/* Preset Chips */}
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          <button
+            type="button"
+            onClick={() => askPreset('How can an attacker reach the protected crown jewel database?')}
+            className="text-[11px] font-medium bg-slate-50 hover:bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md border border-slate-200 transition-colors"
+          >
+            Attack path to DB?
+          </button>
+          <button
+            type="button"
+            onClick={() => askPreset('What is the choke point and how does the fix resolve it?')}
+            className="text-[11px] font-medium bg-slate-50 hover:bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md border border-slate-200 transition-colors"
+          >
+            Choke point explanation
+          </button>
+          <button
+            type="button"
+            onClick={() => askPreset('What is the blast radius reduction?')}
+            className="text-[11px] font-medium bg-slate-50 hover:bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md border border-slate-200 transition-colors"
+          >
+            Blast radius reduction
+          </button>
+        </div>
+
+        {/* Query Input */}
+        <form onSubmit={handleAskSentinel} className="flex gap-2">
+          <input
+            type="text"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="Ask Sentinel AI about graph topology or remediations..."
+            className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+          />
+          <button
+            type="submit"
+            disabled={sentinelLoading || !question.trim()}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3.5 py-2 rounded-lg transition-colors disabled:opacity-50 shadow-xs"
+          >
+            {sentinelLoading ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
               <Send className="w-3.5 h-3.5" />
-              <span>Ask</span>
-            </button>
-          </form>
-        </Card>
-
-        {/* Right: Before / After Card (5 cols) */}
-        <Card className="lg:col-span-5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-line">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate">Counterfactual Analysis</h3>
-              <div className="flex items-center gap-1 text-[11px] text-mute">
-                <Clock className="w-3.5 h-3.5" />
-                <span>{analysis.timings.analysis_ms} ms</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 text-center my-3">
-              <div className="p-3 bg-bg rounded-xl border border-line">
-                <span className="text-[10px] text-mute uppercase font-bold">Attack Paths</span>
-                <div className="text-lg font-black text-ink mt-0.5">
-                  {analysis.before.path_count} &rarr; <span className="text-green">{analysis.after.path_count}</span>
-                </div>
-              </div>
-
-              <div className="p-3 bg-bg rounded-xl border border-line">
-                <span className="text-[10px] text-mute uppercase font-bold">Risk Score</span>
-                <div className="text-lg font-black text-ink mt-0.5">
-                  {analysis.before.risk} &rarr; <span className="text-green">{analysis.after.risk}</span>
-                </div>
-              </div>
-
-              <div className="p-3 bg-bg rounded-xl border border-line">
-                <span className="text-[10px] text-mute uppercase font-bold">Blast Reduction</span>
-                <div className="text-lg font-black text-green mt-0.5">
-                  -{analysis.blast_reduction_pct}%
-                </div>
-              </div>
-            </div>
-
-            <div className="text-xs text-slate space-y-1.5 pt-2">
-              <div className="flex justify-between">
-                <span>Weighted blast radius:</span>
-                <span className="font-mono font-bold text-ink">
-                  {analysis.before.blast_weighted} &rarr; {analysis.after.blast_weighted}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Reachable nodes:</span>
-                <span className="font-mono font-bold text-ink">
-                  {analysis.before.blast_count} &rarr; {analysis.after.blast_count}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-line text-xs font-medium text-slate flex items-center justify-between">
-            <span>Status:</span>
-            {analysis.applied ? (
-              <span className="text-green font-semibold">
-                approved {approvalInfo?.secondsAfterAnalysis ?? 4} s after analysis
-              </span>
-            ) : (
-              <span className="text-amber font-semibold">
-                waiting for badge approval
-              </span>
             )}
-          </div>
-        </Card>
-      </div>
-    </main>
+            <span>Ask</span>
+          </button>
+        </form>
+      </Card>
+    </div>
   );
 };

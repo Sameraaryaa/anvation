@@ -4,15 +4,36 @@
 
 @layer base {
   body {
-    background-color: #F7F8FC;
-    color: #12152B;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: #F8FAFD;
+    color: #202124;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-/* Cytoscape canvas styling */
+/* Cytoscape container styling */
 .cytoscape-container {
   width: 100%;
   height: 100%;
   position: relative;
+}
+
+/* Google Cloud style subtle scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #DADCE0;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #BDC1C6;
 }
