@@ -1,6 +1,6 @@
 {
-  "scenario": "privesc5-createloginprofile",
-  "display_name": "Terraform: privesc5-CreateLoginProfile",
+  "scenario": "privesc16-passroletonewlambdathentriggerwithnewdynamo",
+  "display_name": "Terraform: privesc16-PassRoleToNewLambdaThenTriggerWithNewDynamo",
   "entry_points": [
     "internet"
   ],
@@ -22,12 +22,14 @@
       "name_ref": null
     },
     {
-      "id": "privesc5-createloginprofile",
+      "id": "privesc16-passroletonewlambdathentriggerwithnewdynamo",
       "type": "role",
-      "label": "Role: privesc5-CreateLoginProfile",
+      "label": "Role: privesc16-PassRoleToNewLambdaThenTriggerWithNewDynamo",
       "exposed": false,
       "public": false,
-      "misconfig": [],
+      "misconfig": [
+        "overprivileged_policy"
+      ],
       "privilege": null,
       "sensitivity": null,
       "crown_jewel": false,
@@ -35,12 +37,14 @@
       "name_ref": null
     },
     {
-      "id": "privesc5-createloginprofile-role",
+      "id": "privesc16-passroletonewlambdathentriggerwithnewdynamo-role",
       "type": "role",
-      "label": "Role: privesc5-CreateLoginProfile-role",
+      "label": "Role: privesc16-PassRoleToNewLambdaThenTriggerWithNewDynamo-role",
       "exposed": false,
       "public": false,
-      "misconfig": [],
+      "misconfig": [
+        "overprivileged_policy"
+      ],
       "privilege": null,
       "sensitivity": null,
       "crown_jewel": false,
@@ -48,12 +52,14 @@
       "name_ref": null
     },
     {
-      "id": "privesc5-createloginprofile-user",
+      "id": "privesc16-passroletonewlambdathentriggerwithnewdynamo-user",
       "type": "role",
-      "label": "Role: privesc5-CreateLoginProfile-user",
+      "label": "Role: privesc16-PassRoleToNewLambdaThenTriggerWithNewDynamo-user",
       "exposed": false,
       "public": false,
-      "misconfig": [],
+      "misconfig": [
+        "overprivileged_policy"
+      ],
       "privilege": null,
       "sensitivity": null,
       "crown_jewel": false,
@@ -74,14 +80,51 @@
       "name_ref": null
     }
   ],
-  "edges": [],
+  "edges": [
+    {
+      "from": "internet",
+      "to": "privesc16-passroletonewlambdathentriggerwithnewdynamo",
+      "type": "EXPOSED_CREDENTIAL",
+      "technique": "T1552",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "privesc16-passroletonewlambdathentriggerwithnewdynamo",
+      "to": "target_cloud_asset",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": true,
+      "fix": "scope_iam_permissions"
+    },
+    {
+      "from": "privesc16-passroletonewlambdathentriggerwithnewdynamo-role",
+      "to": "target_cloud_asset",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "privesc16-passroletonewlambdathentriggerwithnewdynamo-user",
+      "to": "target_cloud_asset",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    }
+  ],
   "remediations": {
     "scope_iam_permissions": {
       "title": "Least-Privilege Scoping on Terraform Resources",
       "detail": "Restrict broad policies to explicit resource ARNs (target_cloud_asset) and enforce IMDSv2 session tokens.",
       "removes_edges": [
         [
-          "privesc5-createloginprofile",
+          "privesc16-passroletonewlambdathentriggerwithnewdynamo",
           "target_cloud_asset"
         ]
       ],
