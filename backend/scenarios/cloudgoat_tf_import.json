@@ -1,0 +1,79 @@
+{
+  "scenario": "cloudgoat_tf_import",
+  "display_name": "Terraform: Terraform Infrastructure",
+  "entry_points": [
+    "internet"
+  ],
+  "crown_jewels": [
+    "secure_customer_vault"
+  ],
+  "nodes": [
+    {
+      "id": "internet",
+      "type": "internet",
+      "label": "Internet",
+      "exposed": true,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "internal_backend_worker",
+      "type": "compute",
+      "label": "EC2: internal_backend_worker",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "scoped_app_role",
+      "type": "role",
+      "label": "Role: scoped_app_role",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "scoped_execution_policy",
+      "type": "role",
+      "label": "Role: scoped_execution_policy",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "secure_customer_vault",
+      "type": "data",
+      "label": "S3: secure_customer_vault",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": "confidential_data",
+      "crown_jewel": true,
+      "value": 10,
+      "name_ref": null
+    }
+  ],
+  "edges": [],
+  "remediations": {}
+}

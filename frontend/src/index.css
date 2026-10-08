@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #F7F8FC;
+    color: #12152B;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+}
+
+/* Cytoscape canvas styling */
+.cytoscape-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}

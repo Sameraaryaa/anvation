@@ -1,0 +1,109 @@
+{
+  "scenario": "cloudgoat_cloud_breach",
+  "display_name": "CloudGoat: Cloud Breach S3 (Rhino Security)",
+  "entry_points": [
+    "internet"
+  ],
+  "crown_jewels": [
+    "s3_cardholder_data"
+  ],
+  "nodes": [
+    {
+      "id": "internet",
+      "type": "internet",
+      "label": "Internet",
+      "exposed": true
+    },
+    {
+      "id": "ec2_reverse_proxy",
+      "type": "compute",
+      "label": "EC2 Reverse Proxy (Nginx)",
+      "public": true,
+      "misconfig": [
+        "ssrf_vulnerable_proxy"
+      ]
+    },
+    {
+      "id": "imds_metadata",
+      "type": "service",
+      "label": "EC2 Metadata Service (IMDSv1)",
+      "misconfig": [
+        "tokenless_imds_hop_limit_unrestricted"
+      ]
+    },
+    {
+      "id": "role_erratic",
+      "type": "role",
+      "label": "IAM Role cg-erratic",
+      "misconfig": [
+        "s3_wildcard_read"
+      ]
+    },
+    {
+      "id": "s3_cardholder_data",
+      "type": "data",
+      "label": "S3 Cardholder Bucket",
+      "sensitivity": "pci_credit_cards",
+      "crown_jewel": true,
+      "value": 10
+    }
+  ],
+  "edges": [
+    {
+      "from": "internet",
+      "to": "ec2_reverse_proxy",
+      "type": "EXPOSED_TO_INTERNET",
+      "technique": "T1190",
+      "difficulty": 2
+    },
+    {
+      "from": "ec2_reverse_proxy",
+      "to": "imds_metadata",
+      "type": "SSRF_METADATA_QUERY",
+      "technique": "T1552.005",
+      "difficulty": 2,
+      "fixable": true,
+      "fix": "enforce_imdsv2"
+    },
+    {
+      "from": "imds_metadata",
+      "to": "role_erratic",
+      "type": "INSTANCE_PROFILE_CREDS",
+      "technique": "T1078.004",
+      "difficulty": 1
+    },
+    {
+      "from": "role_erratic",
+      "to": "s3_cardholder_data",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1
+    }
+  ],
+  "remediations": {
+    "enforce_imdsv2": {
+      "title": "Enforce IMDSv2 & Restrict Hop Limit",
+      "detail": "Require session tokens (http_tokens = required) and set http_put_response_hop_limit = 1 to block SSRF proxying.",
+      "removes_edges": [
+        [
+          "ec2_reverse_proxy",
+          "imds_metadata"
+        ]
+      ],
+      "iam_before": {
+        "MetadataOptions": {
+          "HttpTokens": "optional",
+          "HttpPutResponseHopLimit": 2
+        }
+      },
+      "iam_after": {
+        "MetadataOptions": {
+          "HttpTokens": "required",
+          "HttpPutResponseHopLimit": 1
+        }
+      },
+      "terraform_after": "resource \"aws_instance\" \"reverse_proxy\" {\n  metadata_options {\n    http_endpoint = \"enabled\"\n    http_tokens   = \"required\"\n    http_put_response_hop_limit = 1\n  }\n}",
+      "rego": "package aws.ec2\n\ndeny[msg] {\n  input.metadata_options.http_tokens != \"required\"\n  msg := \"EC2 reverse proxy must enforce IMDSv2 token authentication\"\n}"
+    }
+  }
+}

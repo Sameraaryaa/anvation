@@ -1,0 +1,150 @@
+{
+  "scenario": "privesc1_createnewpolicyversion",
+  "display_name": "Privesc: CreateNewPolicyVersion (Bishop Fox)",
+  "entry_points": [
+    "internet"
+  ],
+  "crown_jewels": [
+    "target_cloud_asset"
+  ],
+  "nodes": [
+    {
+      "id": "internet",
+      "type": "internet",
+      "label": "Internet",
+      "exposed": true,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "privesc1-createnewpolicyversion",
+      "type": "role",
+      "label": "Role: privesc1-CreateNewPolicyVersion",
+      "exposed": false,
+      "public": false,
+      "misconfig": [
+        "overprivileged_policy"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "privesc1-createnewpolicyversion-role",
+      "type": "role",
+      "label": "Role: privesc1-CreateNewPolicyVersion-role",
+      "exposed": false,
+      "public": false,
+      "misconfig": [
+        "overprivileged_policy"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "privesc1-createnewpolicyversion-user",
+      "type": "role",
+      "label": "Role: privesc1-CreateNewPolicyVersion-user",
+      "exposed": false,
+      "public": false,
+      "misconfig": [
+        "overprivileged_policy"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "target_cloud_asset",
+      "type": "data",
+      "label": "Protected Cloud Asset",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": true,
+      "value": 10,
+      "name_ref": null
+    }
+  ],
+  "edges": [
+    {
+      "from": "internet",
+      "to": "privesc1-createnewpolicyversion",
+      "type": "EXPOSED_CREDENTIAL",
+      "technique": "T1552",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "privesc1-createnewpolicyversion",
+      "to": "target_cloud_asset",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "privesc1-createnewpolicyversion-role",
+      "to": "target_cloud_asset",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "privesc1-createnewpolicyversion-user",
+      "to": "target_cloud_asset",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    }
+  ],
+  "remediations": {
+    "scope_iam_permissions": {
+      "title": "Least-Privilege Scoping on Terraform Resources",
+      "detail": "Restrict broad S3/RDS policies to explicit resource ARNs and enforce IMDSv2 session tokens.",
+      "removes_edges": [
+        [
+          "privesc1-createnewpolicyversion",
+          "target_cloud_asset"
+        ]
+      ],
+      "iam_before": {
+        "Effect": "Allow",
+        "Action": [
+          "s3:*",
+          "rds:*"
+        ],
+        "Resource": "*"
+      },
+      "iam_after": {
+        "Effect": "Allow",
+        "Action": [
+          "s3:GetObject"
+        ],
+        "Resource": "arn:aws:s3:::target_cloud_asset/*"
+      },
+      "terraform_after": "resource \"aws_iam_role_policy\" \"remediated\" {\n  name = \"least-privilege-policy\"\n  policy = jsonencode({\n    Version = \"2012-10-17\"\n    Statement = [{\n      Effect = \"Allow\"\n      Action = [\"s3:GetObject\"]\n      Resource = \"arn:aws:s3:::target_cloud_asset/*\"\n    }]\n  })\n}",
+      "rego": "package aws.iam\ndeny[msg] {\n  input.Action == \"*\"\n  msg := \"Wildcard actions prohibited in production Terraform\"\n}"
+    }
+  }
+}

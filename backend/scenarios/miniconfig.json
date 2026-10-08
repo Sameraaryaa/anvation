@@ -1,0 +1,90 @@
+{
+  "scenario": "miniconfig",
+  "display_name": "MiniConfig (test)",
+  "entry_points": [
+    "internet"
+  ],
+  "crown_jewels": [
+    "secrets_store"
+  ],
+  "nodes": [
+    {
+      "id": "internet",
+      "type": "internet",
+      "label": "Internet",
+      "exposed": true
+    },
+    {
+      "id": "api_gw",
+      "type": "compute",
+      "label": "API Gateway",
+      "public": true,
+      "misconfig": [
+        "sg_open_world"
+      ]
+    },
+    {
+      "id": "role_lambda",
+      "type": "role",
+      "label": "Lambda Role",
+      "misconfig": [
+        "read_secrets_wildcard"
+      ]
+    },
+    {
+      "id": "secrets_store",
+      "type": "data",
+      "label": "Secrets Store",
+      "sensitivity": "secrets",
+      "crown_jewel": true,
+      "value": 9
+    }
+  ],
+  "edges": [
+    {
+      "from": "internet",
+      "to": "api_gw",
+      "type": "EXPOSED_TO_INTERNET",
+      "technique": "T1190",
+      "difficulty": 2
+    },
+    {
+      "from": "api_gw",
+      "to": "role_lambda",
+      "type": "ASSUME_ROLE",
+      "technique": "T1078.004",
+      "difficulty": 2
+    },
+    {
+      "from": "role_lambda",
+      "to": "secrets_store",
+      "type": "CAN_READ_DATA",
+      "technique": "T1552.004",
+      "difficulty": 1,
+      "fixable": true,
+      "fix": "scope_secrets"
+    }
+  ],
+  "remediations": {
+    "scope_secrets": {
+      "title": "Scope secret-read permission on Lambda role",
+      "detail": "Restrict secretsmanager:GetSecretValue from '*' to one secret ARN.",
+      "removes_edges": [
+        [
+          "role_lambda",
+          "secrets_store"
+        ]
+      ],
+      "iam_before": {
+        "Effect": "Allow",
+        "Action": "secretsmanager:GetSecretValue",
+        "Resource": "*"
+      },
+      "iam_after": {
+        "Effect": "Allow",
+        "Action": "secretsmanager:GetSecretValue",
+        "Resource": "arn:aws:secretsmanager:REGION:ACCOUNT:secret:prod/app"
+      }
+    }
+  }
+}

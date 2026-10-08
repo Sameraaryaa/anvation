@@ -1,0 +1,72 @@
+{
+  "scenario": "test_import_custom",
+  "display_name": "Custom Test Stack",
+  "entry_points": [
+    "internet"
+  ],
+  "crown_jewels": [
+    "secret_db"
+  ],
+  "nodes": [
+    {
+      "id": "internet",
+      "type": "internet",
+      "label": "Internet",
+      "exposed": true,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "server",
+      "type": "compute",
+      "label": "App Server",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "secret_db",
+      "type": "data",
+      "label": "Secret DB",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": true,
+      "value": 10,
+      "name_ref": null
+    }
+  ],
+  "edges": [
+    {
+      "from": "internet",
+      "to": "server",
+      "type": "EXPOSED_TO_INTERNET",
+      "technique": null,
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "server",
+      "to": "secret_db",
+      "type": "SQL_QUERY",
+      "technique": null,
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    }
+  ],
+  "remediations": {}
+}

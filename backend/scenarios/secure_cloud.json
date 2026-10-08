@@ -1,0 +1,107 @@
+{
+  "scenario": "secure_cloud",
+  "display_name": "SecureCloud (Zero-Trust Compliant Architecture)",
+  "entry_points": [
+    "internet"
+  ],
+  "crown_jewels": [
+    "secure_customer_vault"
+  ],
+  "nodes": [
+    {
+      "id": "internet",
+      "type": "internet",
+      "label": "Internet",
+      "exposed": true,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "cloud_armor_waf",
+      "type": "compute",
+      "label": "Cloud Armor WAF",
+      "exposed": false,
+      "public": true,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "private_app_service",
+      "type": "compute",
+      "label": "Private App Service",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "role_least_privilege",
+      "type": "role",
+      "label": "Least-Privilege App Role",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": "scoped",
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": "app-least-priv-role"
+    },
+    {
+      "id": "secure_customer_vault",
+      "type": "data",
+      "label": "Encrypted Customer Vault",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": "customer_pii",
+      "crown_jewel": true,
+      "value": 10,
+      "name_ref": null
+    }
+  ],
+  "edges": [
+    {
+      "from": "internet",
+      "to": "cloud_armor_waf",
+      "type": "HTTPS_INSPECTED",
+      "technique": "T1190",
+      "difficulty": 10,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "cloud_armor_waf",
+      "to": "private_app_service",
+      "type": "INTERNAL_MTLS",
+      "technique": "T1078",
+      "difficulty": 10,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "private_app_service",
+      "to": "role_least_privilege",
+      "type": "INSTANCE_PROFILE",
+      "technique": "T1078.004",
+      "difficulty": 10,
+      "fixable": false,
+      "fix": null
+    }
+  ],
+  "remediations": {}
+}
