@@ -129,6 +129,25 @@ class FirestoreRepository(Repository):
             return cmd
         return "none"
 
+    def add_device_log(self, device_id: str, level: str, message: str, raw_json: str = "") -> None:
+        try:
+            self.db.collection(f"{self.prefix}_device_logs").add({
+                "device_id": device_id,
+                "level": level,
+                "message": message,
+                "raw_json": raw_json,
+                "ts": int(time.time())
+            })
+        except Exception:
+            pass
+
+    def get_device_logs(self, limit: int = 50, device_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        try:
+            query = self.db.collection(f"{self.prefix}_device_logs").order_by("ts", direction="DESCENDING").limit(limit)
+            return [doc.to_dict() for doc in query.stream()]
+        except Exception:
+            return []
+
     def add_scan(self, card_id: str, device_id: str, known: bool, name: Optional[str], context: str) -> None:
         now = int(time.time())
         uid = normalize_uid(card_id)

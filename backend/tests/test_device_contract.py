@@ -158,3 +158,30 @@ def test_device_contract_sequence(client):
     audit = repo.list_audit()
     assert len(audit) >= 2
     assert repo.verify_chain() is True
+
+def test_device_logging(client):
+    c, repo = client
+
+    # Test POST /api/device/log with JSON
+    r = c.post("/api/device/log", json={"device_id": "esp32-console-01", "level": "info", "message": "RFID initialised ok"})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert r.json()["status"] == "logged"
+
+    # Test POST /api/device/log with raw text
+    r = c.post("/api/device/log", content=b"Booting firmware v1.0.0", headers={"Content-Type": "text/plain"})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+
+    # Test GET /api/device/log
+    r = c.get("/api/device/log")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ok"] is True
+    assert data["count"] >= 2
+    assert any("RFID" in log["message"] for log in data["logs"])
+
+    # Test alias /device/log without /api
+    r = c.post("/device/log", json={"message": "alias test"})
+    assert r.status_code == 200
+    assert r.json()["ok"] is True

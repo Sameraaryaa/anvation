@@ -42,32 +42,28 @@ async def health():
 app.include_router(device_router)
 app.include_router(dashboard_router)
 
+# Aliases for device logging without /api prefix
+@app.api_route("/device/log", methods=["GET", "POST"])
+@app.api_route("/device/logs", methods=["GET", "POST"])
+async def device_log_no_prefix(request: Request):
+    from app.api.device import post_device_log, get_device_logs
+    if request.method == "GET":
+        return await get_device_logs()
+    return await post_device_log(request)
+
 # Frontend static serving and SPA fallback
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-FRONTEND_DIST = (ROOT_DIR / "frontend" / "dist").resolve()
-DASHBOARD_FILE = (ROOT_DIR / "dashboard.html").resolve()
+FRONTEND_DIST = (Path(__file__).resolve().parent.parent.parent / "frontend" / "dist").resolve()
 
 # If assets dir exists, mount it
 assets_dir = FRONTEND_DIST / "assets"
 if assets_dir.is_dir():
     app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
-@app.get("/dashboard")
-@app.get("/dashboard.html")
-async def serve_dashboard():
-    if DASHBOARD_FILE.is_file():
-        return FileResponse(str(DASHBOARD_FILE))
-    return JSONResponse(status_code=404, content={"error": "dashboard_not_found"})
-
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
     # Never intercept /api
     if full_path.startswith("api/") or full_path == "api":
         return JSONResponse(status_code=404, content={"error": "not_found"})
-
-    if full_path in ("dashboard", "dashboard.html"):
-        if DASHBOARD_FILE.is_file():
-            return FileResponse(str(DASHBOARD_FILE))
 
     if FRONTEND_DIST.exists():
         target = FRONTEND_DIST / full_path
@@ -81,3 +77,7 @@ async def serve_spa(full_path: str):
         status_code=404,
         content={"error": "frontend_not_built", "message": "Run 'npm run build' in frontend/ to build UI"}
     )
+
+@app.api_route("/{full_path:path}", methods=["POST", "PUT", "DELETE", "PATCH"])
+async def catch_non_get(full_path: str):
+    return JSONResponse(status_code=404, content={"error": "not_found", "path": full_path})

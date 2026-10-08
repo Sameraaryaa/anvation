@@ -59,6 +59,14 @@ class Repository(ABC):
         """Pops and returns the queued command for device, or 'none'."""
         pass
 
+    def add_device_log(self, device_id: str, level: str, message: str, raw_json: str = "") -> None:
+        """Stores a telemetry log from an IoT device."""
+        pass
+
+    def get_device_logs(self, limit: int = 50, device_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Retrieves recent device logs."""
+        return []
+
     @abstractmethod
     def add_scan(self, card_id: str, device_id: str, known: bool, name: Optional[str], context: str) -> None:
         """Records an RFID scan event."""

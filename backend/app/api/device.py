@@ -1,4 +1,6 @@
 import time
+import json
+import logging
 from typing import Optional
 from fastapi import APIRouter, Request, Header, HTTPException
 from fastapi.responses import JSONResponse
@@ -11,6 +13,8 @@ from app.models import (
 )
 from app.engine.loader import load_scenario
 from app.engine.remediation import apply_fixes
+
+logger = logging.getLogger("aegis.device")
 
 router = APIRouter(prefix="/api", tags=["device"])
 
@@ -201,4 +205,82 @@ async def device_heartbeat(request: Request, body: HeartbeatRequest):
         "ok": True,
         "command": cmd,
         "server_time": int(time.time())
+    }
+
+@router.post("/device/log")
+@router.post("/device/logs")
+async def post_device_log(request: Request):
+    device_id = request.headers.get("X-Device-Id") or "esp32-console-01"
+    level = "info"
+    message = ""
+    raw_json_str = ""
+
+    try:
+        body_bytes = await request.body()
+        if body_bytes:
+            body_str = body_bytes.decode("utf-8", errors="replace")
+            try:
+                data = json.loads(body_str)
+                if isinstance(data, dict):
+                    raw_json_str = body_str
+                    device_id = str(data.get("device_id") or data.get("device") or data.get("id") or device_id)
+                    level = str(data.get("level") or data.get("severity") or level)
+                    message = str(data.get("message") or data.get("msg") or data.get("log") or data.get("text") or data.get("payload") or body_str)
+                elif isinstance(data, list):
+                    raw_json_str = body_str
+                    message = json.dumps(data)
+                else:
+                    message = str(data)
+            except Exception:
+                message = body_str
+                if "=" in body_str and not body_str.startswith("{"):
+                    try:
+                        from urllib.parse import parse_qs
+                        parsed = parse_qs(body_str)
+                        if "message" in parsed:
+                            message = parsed["message"][0]
+                        elif "msg" in parsed:
+                            message = parsed["msg"][0]
+                        elif "log" in parsed:
+                            message = parsed["log"][0]
+                        if "device_id" in parsed:
+                            device_id = parsed["device_id"][0]
+                    except Exception:
+                        pass
+    except Exception as e:
+        message = f"Error reading log body: {e}"
+
+    if not message and request.query_params:
+        qp = dict(request.query_params)
+        message = qp.get("msg") or qp.get("message") or qp.get("log") or str(qp)
+        device_id = qp.get("device_id") or device_id
+
+    if not message:
+        message = "device_event"
+
+    remote_ip = request.client.host if request.client else "unknown"
+    logger.info(f"ESP32 Log [{device_id}@{remote_ip}] [{level.upper()}]: {message}")
+
+    repo = get_repo()
+    try:
+        repo.add_device_log(device_id, level, message, raw_json_str)
+    except Exception as e:
+        logger.warning(f"Failed to persist device log: {e}")
+
+    return {
+        "ok": True,
+        "status": "logged",
+        "device_id": device_id,
+        "ts": int(time.time())
+    }
+
+@router.get("/device/log")
+@router.get("/device/logs")
+async def get_device_logs(limit: int = 50, device_id: Optional[str] = None):
+    repo = get_repo()
+    logs = repo.get_device_logs(limit=limit, device_id=device_id)
+    return {
+        "ok": True,
+        "logs": logs,
+        "count": len(logs)
     }

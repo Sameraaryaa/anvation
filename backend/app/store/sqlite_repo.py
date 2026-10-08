@@ -59,6 +59,14 @@ CREATE TABLE IF NOT EXISTS audit (
   this_hash TEXT NOT NULL,
   ts INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS device_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  device_id TEXT,
+  level TEXT,
+  message TEXT,
+  raw_json TEXT,
+  ts INTEGER
+);
 """
 
 class SQLiteRepository(Repository):
@@ -256,6 +264,42 @@ class SQLiteRepository(Repository):
                 self.conn.commit()
                 return cmd
             return "none"
+
+    def add_device_log(self, device_id: str, level: str, message: str, raw_json: str = "") -> None:
+        with self.lock:
+            cur = self.conn.cursor()
+            now = int(time.time())
+            cur.execute(
+                "INSERT INTO device_logs (device_id, level, message, raw_json, ts) VALUES (?, ?, ?, ?, ?)",
+                (device_id, level, message, raw_json, now)
+            )
+            self.conn.commit()
+
+    def get_device_logs(self, limit: int = 50, device_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        with self.lock:
+            cur = self.conn.cursor()
+            if device_id:
+                cur.execute(
+                    "SELECT id, device_id, level, message, raw_json, ts FROM device_logs WHERE device_id = ? ORDER BY id DESC LIMIT ?",
+                    (device_id, limit)
+                )
+            else:
+                cur.execute(
+                    "SELECT id, device_id, level, message, raw_json, ts FROM device_logs ORDER BY id DESC LIMIT ?",
+                    (limit,)
+                )
+            rows = cur.fetchall()
+            return [
+                {
+                    "id": r[0],
+                    "device_id": r[1],
+                    "level": r[2],
+                    "message": r[3],
+                    "raw_json": r[4],
+                    "ts": r[5]
+                }
+                for r in rows
+            ]
 
     def add_scan(self, card_id: str, device_id: str, known: bool, name: Optional[str], context: str) -> None:
         with self.lock:
