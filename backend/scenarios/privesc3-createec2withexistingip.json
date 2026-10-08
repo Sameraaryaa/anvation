@@ -96,8 +96,8 @@
       "type": "CAN_READ_DATA",
       "technique": "T1530",
       "difficulty": 1,
-      "fixable": false,
-      "fix": null
+      "fixable": true,
+      "fix": "scope_iam_permissions"
     },
     {
       "from": "privesc3-createec2withexistinginstanceprofile-role",
@@ -119,9 +119,9 @@
     }
   ],
   "remediations": {
-    "remediate_privesc3_createec2withexistingip": {
-      "title": "Sever Attack Path: privesc3-createec2withexistinginstanceprofile -> target_cloud_asset",
-      "detail": "Automated least-privilege scoping revoking unauthorized path between privesc3-createec2withexistinginstanceprofile and target_cloud_asset.",
+    "scope_iam_permissions": {
+      "title": "Least-Privilege Scoping on Terraform Resources",
+      "detail": "Restrict broad policies to explicit resource ARNs (target_cloud_asset) and enforce IMDSv2 session tokens.",
       "removes_edges": [
         [
           "privesc3-createec2withexistinginstanceprofile",
@@ -130,16 +130,21 @@
       ],
       "iam_before": {
         "Effect": "Allow",
-        "Action": "*",
+        "Action": [
+          "s3:*",
+          "rds:*"
+        ],
         "Resource": "*"
       },
       "iam_after": {
-        "Effect": "Deny",
-        "Action": "*",
-        "Resource": "arn:aws:::resource/target_cloud_asset"
+        "Effect": "Allow",
+        "Action": [
+          "s3:GetObject"
+        ],
+        "Resource": "arn:aws:s3:::target_cloud_asset/*"
       },
-      "terraform_after": "# AEGIS Auto-Remediation\n# Severed privesc3-createec2withexistinginstanceprofile -> target_cloud_asset\n",
-      "rego": "package aegis.policy\ndeny[msg] { input.target == \"target_cloud_asset\"; msg := \"Path severed\" }"
+      "terraform_after": "resource \"aws_iam_role_policy\" \"remediated\" {\n  name = \"least-privilege-policy\"\n  policy = jsonencode({\n    Version = \"2012-10-17\"\n    Statement = [{\n      Effect = \"Allow\"\n      Action = [\"s3:GetObject\"]\n      Resource = \"arn:aws:s3:::target_cloud_asset/*\"\n    }]\n  })\n}",
+      "rego": "package aws.iam\ndeny[msg] {\n  input.Action == \"*\"\n  msg := \"Wildcard actions prohibited in production Terraform\"\n}"
     }
   }
 }
