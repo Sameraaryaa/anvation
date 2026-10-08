@@ -15,16 +15,16 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   actionLabel = 'Run analysis',
 }) => {
   return (
-    <div className="bg-card border border-line rounded-card p-12 text-center max-w-xl mx-auto my-12 shadow-card">
-      <div className="w-14 h-14 rounded-2xl bg-violet/10 text-violet flex items-center justify-center mx-auto mb-4">
+    <div className="bg-white border border-slate-200/90 rounded-xl p-12 text-center max-w-xl mx-auto my-12 shadow-xs">
+      <div className="w-14 h-14 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-4 border border-blue-200/60">
         <ShieldAlert className="w-7 h-7" />
       </div>
-      <h3 className="text-lg font-bold text-ink mb-2">{title}</h3>
-      <p className="text-sm text-slate mb-6 leading-relaxed">{description}</p>
+      <h3 className="text-lg font-bold text-slate-900 mb-2">{title}</h3>
+      <p className="text-sm text-slate-500 mb-6 leading-relaxed">{description}</p>
       {onAction && (
         <button
           onClick={onAction}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet hover:bg-violet/90 text-white font-semibold text-sm rounded-xl shadow-sm transition-colors"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-lg shadow-xs transition-colors cursor-pointer"
         >
           <Play className="w-4 h-4 fill-white" />
           {actionLabel}

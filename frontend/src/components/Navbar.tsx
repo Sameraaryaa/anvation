@@ -73,17 +73,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
           </Link>
         </div>
 
-        {/* Center: Google Cloud Style Project / Scenario Selector */}
-        <div className="flex items-center gap-2 flex-1 max-w-xs sm:max-w-md mx-2 sm:mx-4">
-          <div className="relative w-full">
-            <div className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 transition-colors cursor-pointer w-full shadow-2xs">
+        {/* Center: Scenario Selector with Attached "Run Analysis" Button */}
+        <div className="flex items-center gap-1.5 flex-1 max-w-sm sm:max-w-md lg:max-w-lg mx-2 sm:mx-4 min-w-0">
+          <div className="flex items-center w-full bg-slate-50 hover:bg-slate-100/90 border border-slate-200/90 rounded-lg p-0.5 shadow-2xs transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 min-w-0">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 flex-1 min-w-0 relative">
               <Layers className="w-3.5 h-3.5 text-blue-600 shrink-0" />
               <select
+                id="scenario-selector"
                 value={selectedScenario}
-                onChange={(e) => setSelectedScenario(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedScenario(val);
+                  runAnalysis(val);
+                }}
                 disabled={loading}
                 className="bg-transparent font-medium text-slate-800 text-xs w-full focus:outline-none cursor-pointer truncate appearance-none pr-5"
-                title="Select architecture scenario"
+                title="Select architecture scenario to analyze"
               >
                 {scenarios.map((sc) => (
                   <option key={sc.id} value={sc.id}>
@@ -91,13 +96,27 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
                   </option>
                 ))}
               </select>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 pointer-events-none" />
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 pointer-events-none" />
             </div>
+
+            {/* Attached Run Analysis Button */}
+            <button
+              id="run-analysis-btn"
+              type="button"
+              onClick={() => runAnalysis(selectedScenario)}
+              disabled={loading}
+              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-xs px-3 sm:px-3.5 py-1.5 rounded-md shadow-xs transition-colors disabled:opacity-50 whitespace-nowrap shrink-0 cursor-pointer"
+              title="Execute attack graph analysis on selected scenario"
+            >
+              <Play className={`w-3.5 h-3.5 fill-white shrink-0 ${loading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{loading ? 'Analyzing...' : 'Run Analysis'}</span>
+              <span className="sm:hidden">{loading ? '...' : 'Run'}</span>
+            </button>
           </div>
         </div>
 
         {/* Right: Actions & Device Status */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {/* Import Button (Google Cloud Secondary Outlined) */}
           <button
             type="button"
@@ -108,19 +127,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
           >
             <Upload className="w-3.5 h-3.5 text-blue-600" />
             <span className="hidden md:inline">Import</span>
-          </button>
-
-          {/* Run Analysis Button (Google Cloud Primary Filled) */}
-          <button
-            type="button"
-            onClick={() => runAnalysis()}
-            disabled={loading}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3 sm:px-3.5 py-1.5 rounded-lg shadow-xs transition-colors disabled:opacity-50 whitespace-nowrap"
-            title="Execute attack graph analysis"
-          >
-            <Play className="w-3.5 h-3.5 fill-white" />
-            <span className="hidden sm:inline">Run analysis</span>
-            <span className="sm:hidden">Run</span>
           </button>
 
           {/* Reset Button */}

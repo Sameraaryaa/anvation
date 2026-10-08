@@ -73,7 +73,7 @@ interface Packet {
 }
 
 export const Overview: React.FC = () => {
-  const { analysis, status, devices, runAnalysis } = useApp();
+  const { analysis, status, devices, runAnalysis, loading, selectedScenario } = useApp();
   const cyRef = useRef<HTMLDivElement>(null);
   const cyInstance = useRef<Core | null>(null);
   const packetCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -691,7 +691,7 @@ export const Overview: React.FC = () => {
           </p>
         </div>
 
-        {/* Choke Point & Status Pill */}
+        {/* Choke Point, Status Pill & Run Analysis Action */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200/80 text-xs font-semibold text-amber-800">
             <Activity className="w-3.5 h-3.5 text-amber-600" />
@@ -700,6 +700,18 @@ export const Overview: React.FC = () => {
               {analysis.choke_point ? analysis.choke_point.label : 'None'}
             </span>
           </div>
+
+          <button
+            id="overview-run-analysis-btn"
+            type="button"
+            onClick={() => runAnalysis(selectedScenario)}
+            disabled={loading}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-xs px-3.5 py-1.5 rounded-lg shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+            title="Execute attack graph analysis"
+          >
+            <Play className={`w-3.5 h-3.5 fill-white shrink-0 ${loading ? 'animate-spin' : ''}`} />
+            <span>{loading ? 'Analyzing...' : 'Run Analysis'}</span>
+          </button>
         </div>
       </div>
 

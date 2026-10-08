@@ -114,6 +114,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Run analysis action
   const runAnalysis = async (scenarioId?: string) => {
     const sc = scenarioId || state.selectedScenario;
+    if (scenarioId && scenarioId !== state.selectedScenario) {
+      dispatch({ type: 'SET_SELECTED_SCENARIO', payload: scenarioId });
+    }
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const result = await api.runAnalysis(sc);
