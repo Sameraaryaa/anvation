@@ -85,6 +85,57 @@ async def get_latest_analysis():
         return JSONResponse(status_code=404, content={"error": "no_analysis"})
     return analysis
 
+@router.get("/paths")
+async def get_paths_endpoint():
+    repo = get_repo()
+    analysis = repo.get_analysis()
+    if not analysis:
+        st = repo.get_state()
+        sc_id = st.get("scenario") or "educloud"
+        try:
+            sc = load_scenario(sc_id)
+            an = run_full_analysis(sc)
+            analysis = an.model_dump()
+            repo.set_analysis(analysis)
+        except Exception:
+            return {
+                "scenario": sc_id,
+                "display_name": sc_id,
+                "risk": 0,
+                "paths": [],
+                "graph": {"nodes": [], "edges": []},
+                "choke_point": None,
+                "applied": False,
+                "recommended_fixes": []
+            }
+    
+    paths = analysis.get("paths", [])
+    for p in paths:
+        if "severity" not in p:
+            r = p.get("risk", analysis.get("before", {}).get("risk", 50))
+            if r >= 80:
+                p["severity"] = "Critical"
+            elif r >= 60:
+                p["severity"] = "High"
+            elif r >= 30:
+                p["severity"] = "Medium"
+            else:
+                p["severity"] = "Low"
+        else:
+            # Capitalize severity for display consistency
+            p["severity"] = p["severity"].capitalize()
+
+    return {
+        "scenario": analysis.get("scenario"),
+        "display_name": analysis.get("display_name"),
+        "risk": analysis.get("before", {}).get("risk", 0),
+        "paths": paths,
+        "graph": analysis.get("graph", {"nodes": [], "edges": []}),
+        "choke_point": analysis.get("choke_point"),
+        "applied": analysis.get("applied", False),
+        "recommended_fixes": analysis.get("recommended_fixes", [])
+    }
+
 @router.get("/scenarios")
 async def get_scenarios():
     return list_scenarios()

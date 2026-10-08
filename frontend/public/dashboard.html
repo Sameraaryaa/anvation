@@ -1,0 +1,2219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AEGIS-Graph — Cloud Attack Path Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Vis.js Network for Interactive Topology Graph -->
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+  <style>
+    /* =====================================================================
+       CSS DESIGN SYSTEM & THEME TOKENS
+       ===================================================================== */
+    :root {
+      /* Dark Theme (Default) */
+      --bg-primary: #0F172A;
+      --bg-secondary: #1E293B;
+      --bg-tertiary: #162032;
+      --bg-card: #1E293B;
+      --bg-card-hover: #243248;
+      --border-color: #334155;
+      --border-focus: #06B6D4;
+      
+      --text-primary: #F8FAFC;
+      --text-secondary: #94A3B8;
+      --text-muted: #64748B;
+      
+      --accent-cyan: #06B6D4;
+      --accent-cyan-glow: rgba(6, 182, 212, 0.25);
+      --accent-blue: #3B82F6;
+      --accent-blue-glow: rgba(59, 130, 246, 0.25);
+      
+      --status-safe: #10B981;
+      --status-safe-bg: rgba(16, 185, 129, 0.15);
+      --status-safe-border: #059669;
+      
+      --status-warning: #F59E0B;
+      --status-warning-bg: rgba(245, 158, 11, 0.15);
+      --status-warning-border: #D97706;
+      
+      --status-unsafe: #EF4444;
+      --status-unsafe-bg: rgba(239, 68, 68, 0.15);
+      --status-unsafe-border: #DC2626;
+      
+      --status-critical: #991B1B;
+      --status-critical-bg: rgba(153, 27, 27, 0.25);
+      --status-critical-border: #7F1D1D;
+
+      --card-radius: 12px;
+      --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+      --shadow-hover: 0 10px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+    }
+
+    [data-theme="light"] {
+      --bg-primary: #F8FAFC;
+      --bg-secondary: #FFFFFF;
+      --bg-tertiary: #F1F5F9;
+      --bg-card: #FFFFFF;
+      --bg-card-hover: #F8FAFC;
+      --border-color: #E2E8F0;
+      --border-focus: #0284C7;
+      
+      --text-primary: #0F172A;
+      --text-secondary: #475569;
+      --text-muted: #94A3B8;
+      
+      --accent-cyan: #0284C7;
+      --accent-cyan-glow: rgba(2, 132, 199, 0.15);
+      --accent-blue: #2563EB;
+      
+      --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.08);
+      --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Reset & Base */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      width: 100%;
+      overflow-x: hidden;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--accent-cyan);
+    }
+
+    /* =====================================================================
+       CONNECTION ERROR BANNER
+       ===================================================================== */
+    #connection-banner {
+      display: none;
+      background: linear-gradient(90deg, #991B1B, #B91C1C);
+      color: #FFF;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(185, 28, 28, 0.4);
+      animation: slideDown 0.3s ease forwards;
+    }
+    #connection-banner.active {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+    #connection-banner button {
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      color: #FFF;
+      padding: 3px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: var(--transition-smooth);
+    }
+    #connection-banner button:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    @keyframes slideDown {
+      from { transform: translateY(-100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    /* =====================================================================
+       HEADER
+       ===================================================================== */
+    .header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 900;
+      height: 64px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #0284C7, #06B6D4);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FFF;
+      box-shadow: 0 2px 8px var(--accent-cyan-glow);
+      flex-shrink: 0;
+    }
+    .brand-logo svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .brand-title {
+      display: flex;
+      flex-direction: column;
+    }
+    .brand-title h1 {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .brand-tag {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    .brand-subtitle {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .header-center {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      max-width: 440px;
+    }
+
+    .scenario-picker-wrap {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 2px 6px;
+      gap: 6px;
+    }
+    .scenario-picker-wrap select {
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 600;
+      width: 100%;
+      outline: none;
+      cursor: pointer;
+    }
+    .scenario-picker-wrap select option {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+    .btn-run-analysis {
+      background: var(--accent-cyan);
+      color: #0F172A;
+      font-weight: 700;
+      font-size: 12px;
+      padding: 6px 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: var(--transition-smooth);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .btn-run-analysis:hover {
+      filter: brightness(1.15);
+      box-shadow: 0 0 12px var(--accent-cyan-glow);
+    }
+    .btn-run-analysis:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Real-Time Clock */
+    .realtime-clock {
+      display: none;
+      flex-direction: column;
+      align-items: flex-end;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-secondary);
+      border-right: 1px solid var(--border-color);
+      padding-right: 12px;
+    }
+    .realtime-clock .time {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .realtime-clock .date {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    /* System Status Indicator */
+    .system-status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--status-safe);
+      box-shadow: 0 0 8px var(--status-safe);
+      transition: background 0.3s ease;
+    }
+    .status-dot.offline {
+      background: var(--status-unsafe);
+      box-shadow: 0 0 8px var(--status-unsafe);
+    }
+    .status-dot.pulse {
+      animation: pulseAnimation 1.5s infinite;
+    }
+    @keyframes pulseAnimation {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+
+    /* Theme Toggle Button */
+    .btn-theme-toggle {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: var(--transition-smooth);
+    }
+    .btn-theme-toggle:hover {
+      color: var(--text-primary);
+      border-color: var(--accent-cyan);
+    }
+    .btn-theme-toggle svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Hamburger Nav for Mobile */
+    .btn-hamburger {
+      display: flex;
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      cursor: pointer;
+      padding: 4px;
+    }
+    .btn-hamburger svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    /* =====================================================================
+       LIVE STATUS BAR (FULL-WIDTH BANNER)
+       ===================================================================== */
+    .live-status-bar {
+      width: 100%;
+      padding: 12px 16px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      transition: background 0.3s ease, border-color 0.3s ease;
+      border-bottom: 1px solid transparent;
+      font-size: 13px;
+    }
+
+    .live-status-bar.safe {
+      background: linear-gradient(90deg, rgba(6, 78, 59, 0.9), rgba(6, 95, 70, 0.8));
+      border-color: #059669;
+      color: #A7F3D0;
+    }
+    .live-status-bar.warning {
+      background: linear-gradient(90deg, rgba(120, 53, 15, 0.9), rgba(146, 64, 14, 0.8));
+      border-color: #D97706;
+      color: #FDE68A;
+    }
+    .live-status-bar.unsafe {
+      background: linear-gradient(90deg, rgba(127, 29, 29, 0.9), rgba(153, 27, 27, 0.8));
+      border-color: #DC2626;
+      color: #FECACA;
+    }
+    .live-status-bar.critical {
+      background: linear-gradient(90deg, rgba(69, 10, 10, 0.95), rgba(127, 29, 29, 0.9));
+      border-color: #991B1B;
+      color: #FEE2E2;
+    }
+
+    .status-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-badge-lg {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .status-headline {
+      font-weight: 700;
+      font-size: 14px;
+      color: #FFF;
+    }
+    .status-meta-text {
+      font-size: 12px;
+      opacity: 0.9;
+    }
+
+    .status-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .status-metric-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #FFF;
+    }
+
+    /* =====================================================================
+       LAYOUT WRAPPER (SIDEBAR + MAIN CONTENT)
+       ===================================================================== */
+    .app-layout {
+      display: flex;
+      width: 100%;
+      min-height: calc(100vh - 64px - 48px);
+    }
+
+    /* Desktop Sidebar Nav */
+    .sidebar-nav {
+      width: 240px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      padding: 16px 12px;
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      transition: var(--transition-smooth);
+      cursor: pointer;
+    }
+    .nav-link:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+    }
+    .nav-link.active {
+      background: rgba(6, 182, 212, 0.12);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(6, 182, 212, 0.25);
+    }
+    .nav-link svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .nav-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin: 16px 0 6px 12px;
+    }
+
+    /* Main Container Grid */
+    .main-content {
+      flex: 1;
+      padding: 16px;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* Responsive Grid Architecture */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    /* =====================================================================
+       CARD COMMON STYLES
+       ===================================================================== */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--card-radius);
+      box-shadow: var(--shadow-card);
+      transition: var(--transition-smooth);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .card:hover {
+      box-shadow: var(--shadow-hover);
+      border-color: rgba(6, 182, 212, 0.4);
+    }
+
+    .card-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title svg {
+      width: 16px;
+      height: 16px;
+      color: var(--accent-cyan);
+    }
+    .card-action-btn {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition-smooth);
+    }
+    .card-action-btn:hover {
+      border-color: var(--accent-cyan);
+      color: var(--text-primary);
+    }
+
+    .card-body {
+      padding: 16px;
+      flex: 1;
+    }
+
+    /* =====================================================================
+       SECTION 1: RISK SCORE CARD (CIRCULAR GAUGE)
+       ===================================================================== */
+    .gauge-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 0;
+    }
+    .gauge-container {
+      position: relative;
+      width: 180px;
+      height: 180px;
+    }
+    .gauge-svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+    .gauge-track {
+      fill: none;
+      stroke: var(--bg-tertiary);
+      stroke-width: 14;
+    }
+    .gauge-fill {
+      fill: none;
+      stroke: var(--status-safe);
+      stroke-width: 14;
+      stroke-linecap: round;
+      stroke-dasharray: 440;
+      stroke-dashoffset: 440;
+      transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.4s ease;
+    }
+    .gauge-inner-content {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .gauge-value {
+      font-size: 42px;
+      font-weight: 800;
+      line-height: 1;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-primary);
+    }
+    .gauge-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .gauge-status-badge {
+      margin-top: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .gauge-submetrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      width: 100%;
+      margin-top: 16px;
+      border-top: 1px solid var(--border-color);
+      padding-top: 12px;
+    }
+    .submetric-box {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+    }
+    .submetric-box .label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .submetric-box .value {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      margin-top: 2px;
+    }
+
+    /* =====================================================================
+       SECTION 2: ATTACK PATHS PANEL
+       ===================================================================== */
+    .paths-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .paths-sort-select {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 6px;
+      outline: none;
+      cursor: pointer;
+    }
+    .path-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 480px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .path-item {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      transition: var(--transition-smooth);
+      cursor: pointer;
+    }
+    .path-item:hover {
+      border-color: var(--accent-cyan);
+      background: var(--bg-card-hover);
+    }
+    .path-item-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .path-item-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .severity-badge {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+    .severity-badge.critical {
+      background: rgba(153, 27, 27, 0.4);
+      color: #F87171;
+      border: 1px solid #DC2626;
+    }
+    .severity-badge.high {
+      background: rgba(220, 38, 38, 0.25);
+      color: #FCA5A5;
+      border: 1px solid #EF4444;
+    }
+    .severity-badge.medium {
+      background: rgba(217, 119, 6, 0.25);
+      color: #FCD34D;
+      border: 1px solid #F59E0B;
+    }
+    .severity-badge.low {
+      background: rgba(5, 150, 105, 0.25);
+      color: #6EE7B7;
+      border: 1px solid #10B981;
+    }
+
+    .path-chain {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .node-badge {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 200px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .node-badge.entry {
+      border-color: #EF4444;
+      background: rgba(239, 68, 68, 0.15);
+      color: #FCA5A5;
+    }
+    .node-badge.choke {
+      border-color: #F59E0B;
+      background: rgba(245, 158, 11, 0.15);
+      color: #FCD34D;
+    }
+    .node-badge.crown {
+      border-color: #06B6D4;
+      background: rgba(6, 182, 212, 0.15);
+      color: #67E8F9;
+    }
+    .chain-arrow {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .path-details {
+      display: none;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-color);
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .path-item.expanded .path-details {
+      display: block;
+    }
+
+    /* =====================================================================
+       SECTION 3: NETWORK GRAPH VISUALIZATION
+       ===================================================================== */
+    .graph-card {
+      position: relative;
+    }
+    .graph-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-graph-tool {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: bold;
+      transition: var(--transition-smooth);
+    }
+    .btn-graph-tool:hover {
+      color: var(--text-primary);
+      border-color: var(--accent-cyan);
+    }
+    #network-container {
+      width: 100%;
+      height: 480px;
+      background: radial-gradient(circle at 50% 50%, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Mobile Simplified List View for Graph */
+    .mobile-graph-fallback {
+      display: none;
+      padding: 12px;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 480px;
+      overflow-y: auto;
+    }
+    .mobile-node-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      padding: 10px 12px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Graph Legend */
+    .graph-legend {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+      padding-top: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    /* =====================================================================
+       SECTION 4: RECENT ACTIVITY / AUDIT LOG
+       ===================================================================== */
+    .audit-table-wrapper {
+      width: 100%;
+      max-height: 280px;
+      overflow-y: auto;
+      overflow-x: auto;
+    }
+    .audit-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      text-align: left;
+    }
+    .audit-table th {
+      background: var(--bg-tertiary);
+      color: var(--text-muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .audit-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    .audit-table tr:hover td {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+    }
+    .audit-action-pill {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .audit-action-pill.scan { background: rgba(59, 130, 246, 0.2); color: #93C5FD; border: 1px solid #3B82F6; }
+    .audit-action-pill.approve { background: rgba(16, 185, 129, 0.2); color: #6EE7B7; border: 1px solid #10B981; }
+    .audit-action-pill.reject { background: rgba(239, 68, 68, 0.2); color: #FCA5A5; border: 1px solid #EF4444; }
+    .audit-action-pill.fix { background: rgba(6, 182, 212, 0.2); color: #67E8F9; border: 1px solid #06B6D4; }
+
+    /* =====================================================================
+       SECTION 5: HARDWARE DEVICES PANEL
+       ===================================================================== */
+    .devices-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .device-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: var(--transition-smooth);
+    }
+    .device-card:hover {
+      border-color: var(--accent-cyan);
+      background: var(--bg-card-hover);
+    }
+    .device-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .device-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .device-status-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .device-status-badge.online {
+      background: rgba(16, 185, 129, 0.2);
+      color: #6EE7B7;
+      border: 1px solid #10B981;
+    }
+    .device-status-badge.offline {
+      background: rgba(239, 68, 68, 0.2);
+      color: #FCA5A5;
+      border: 1px solid #EF4444;
+    }
+
+    .device-details-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 11px;
+    }
+    .device-detail-item {
+      display: flex;
+      flex-direction: column;
+    }
+    .device-detail-item .key {
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .device-detail-item .val {
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }
+
+    /* =====================================================================
+       MOBILE DRAWER NAVIGATION
+       ===================================================================== */
+    .mobile-drawer-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 998;
+    }
+    .mobile-drawer-overlay.active {
+      display: block;
+    }
+    .mobile-drawer {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: -280px;
+      width: 280px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      z-index: 999;
+      transition: left 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      padding: 20px 16px;
+      gap: 12px;
+    }
+    .mobile-drawer.active {
+      left: 0;
+    }
+    .drawer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+      margin-bottom: 8px;
+    }
+
+    /* =====================================================================
+       RESPONSIVE BREAKPOINTS (MOBILE FIRST -> TABLET -> DESKTOP)
+       ===================================================================== */
+    
+    /* Tablet (768px and up) */
+    @media (min-width: 768px) {
+      .dashboard-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .col-span-2-tablet {
+        grid-column: span 2;
+      }
+      .devices-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .header-center {
+        display: flex;
+      }
+      .realtime-clock {
+        display: flex;
+      }
+      .btn-hamburger {
+        display: none;
+      }
+    }
+
+    /* Desktop (1024px and up) */
+    @media (min-width: 1024px) {
+      .sidebar-nav {
+        display: flex;
+      }
+      .dashboard-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+      }
+      .col-span-2-desktop {
+        grid-column: span 2;
+      }
+      .col-span-3-desktop {
+        grid-column: span 3;
+      }
+      .main-content {
+        padding: 24px;
+      }
+    }
+
+    /* Small Mobile Tweaks (Under 640px) */
+    @media (max-width: 640px) {
+      #network-container {
+        display: none;
+      }
+      .mobile-graph-fallback {
+        display: flex;
+      }
+      .status-bar-right {
+        display: none;
+      }
+    }
+
+    /* Loading Skeleton */
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-card-hover) 50%, var(--bg-tertiary) 75%);
+      background-size: 200% 100%;
+      animation: skeletonLoading 1.5s infinite;
+      border-radius: 4px;
+    }
+    @keyframes skeletonLoading {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+  </style>
+</head>
+<body data-theme="dark">
+
+  <!-- CONNECTION ERROR BANNER -->
+  <div id="connection-banner">
+    <span>⚠️ Cannot connect to AEGIS-Graph API. Retrying connection...</span>
+    <button onclick="retryConnectionNow()">Retry Now</button>
+  </div>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <!-- Hamburger for Mobile -->
+      <button class="btn-hamburger" id="hamburger-btn" onclick="toggleMobileDrawer()" aria-label="Toggle Navigation">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
+      <!-- Brand Logo -->
+      <div class="brand-logo">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        </svg>
+      </div>
+
+      <!-- Title & Tag -->
+      <div class="brand-title">
+        <h1>
+          AEGIS-Graph
+          <span class="brand-tag">Ops Console</span>
+        </h1>
+        <span class="brand-subtitle">Cloud Attack Path Intelligence</span>
+      </div>
+    </div>
+
+    <!-- Center Scenario Selector & Run Control -->
+    <div class="header-center">
+      <div class="scenario-picker-wrap">
+        <select id="scenario-selector" onchange="onScenarioSelectChange(this.value)" title="Select Architecture Scenario">
+          <option value="educloud">EduCloud (synthetic ed-tech stack)</option>
+        </select>
+        <button class="btn-run-analysis" id="run-analysis-btn" onclick="triggerRunAnalysis()">
+          <svg style="width: 14px; height: 14px;" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+          <span id="run-btn-label">Run Analysis</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Header Right Controls -->
+    <div class="header-right">
+      <!-- Real-Time Clock -->
+      <div class="realtime-clock" id="realtime-clock">
+        <span class="time" id="clock-time">00:00:00</span>
+        <span class="date" id="clock-date">OCT 08, 2026</span>
+      </div>
+
+      <!-- System Online/Offline Indicator -->
+      <div class="system-status-indicator" id="system-status-indicator" title="Sentinel Backend Daemon Status">
+        <span class="status-dot pulse" id="system-status-dot"></span>
+        <span id="system-status-text">ONLINE</span>
+      </div>
+
+      <!-- Dark Theme Toggle -->
+      <button class="btn-theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Dark / Light Theme" aria-label="Toggle Theme">
+        <svg id="theme-icon-moon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+        </svg>
+        <svg id="theme-icon-sun" style="display:none;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- LIVE STATUS BAR (FULL-WIDTH BANNER) -->
+  <section class="live-status-bar safe" id="live-status-bar">
+    <div class="status-bar-left">
+      <span class="status-badge-lg" id="status-bar-badge">SYSTEM SAFE</span>
+      <span class="status-headline" id="status-bar-headline">No Uncontained Attack Vectors Detected</span>
+    </div>
+    <div class="status-bar-right">
+      <span class="status-metric-pill" id="status-paths-count">
+        <svg style="width: 14px; height: 14px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+        <span id="status-paths-text">0 Attack Paths</span>
+      </span>
+      <span class="status-metric-pill" id="status-fixes-count">
+        <svg style="width: 14px; height: 14px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span id="status-fixes-text">0 Fixes Pending</span>
+      </span>
+    </div>
+  </section>
+
+  <!-- MOBILE DRAWER -->
+  <div class="mobile-drawer-overlay" id="drawer-overlay" onclick="toggleMobileDrawer()"></div>
+  <aside class="mobile-drawer" id="mobile-drawer">
+    <div class="drawer-header">
+      <div class="brand-title">
+        <h1>AEGIS-Graph</h1>
+        <span class="brand-subtitle">Navigation</span>
+      </div>
+      <button class="btn-hamburger" onclick="toggleMobileDrawer()">✕</button>
+    </div>
+    <div style="margin-bottom: 12px;">
+      <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Attack Scenario</label>
+      <select id="mobile-scenario-selector" onchange="onScenarioSelectChange(this.value)" style="width: 100%; margin-top: 4px; padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px;">
+      </select>
+      <button class="btn-run-analysis" style="width: 100%; margin-top: 8px; justify-content: center;" onclick="triggerRunAnalysis(); toggleMobileDrawer();">
+        ▶ Run Analysis
+      </button>
+    </div>
+    <a class="nav-link active" onclick="toggleMobileDrawer()">📊 Dashboard Overview</a>
+    <a class="nav-link" href="#section-graph" onclick="toggleMobileDrawer()">🌐 Attack Graph</a>
+    <a class="nav-link" href="#section-paths" onclick="toggleMobileDrawer()">⚡ Attack Paths</a>
+    <a class="nav-link" href="#section-hardware" onclick="toggleMobileDrawer()">📟 Hardware Consoles</a>
+    <a class="nav-link" href="#section-audit" onclick="toggleMobileDrawer()">📜 Cryptographic Audit</a>
+  </aside>
+
+  <!-- APP LAYOUT -->
+  <div class="app-layout">
+    <!-- DESKTOP SIDEBAR NAV -->
+    <nav class="sidebar-nav">
+      <span class="nav-section-title">Operations</span>
+      <a class="nav-link active">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+        </svg>
+        Overview
+      </a>
+      <a class="nav-link" href="#section-graph">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+        Attack Topology
+      </a>
+      <a class="nav-link" href="#section-paths">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+        Threat Vectors
+      </a>
+
+      <span class="nav-section-title">Hardware & Link</span>
+      <a class="nav-link" href="#section-hardware">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+        </svg>
+        ESP32 Console
+      </a>
+      <a class="nav-link" href="#section-audit">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+        Audit Log
+      </a>
+    </nav>
+
+    <!-- MAIN DASHBOARD CONTENT -->
+    <main class="main-content">
+      <div class="dashboard-grid">
+
+        <!-- CARD 1: RISK SCORE CARD (LARGE CIRCULAR GAUGE) -->
+        <div class="card" id="section-risk">
+          <div class="card-header">
+            <h2 class="card-title">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Aggregate Risk Score
+            </h2>
+            <span class="card-action-btn" id="risk-score-eval-time">Live Sync</span>
+          </div>
+          <div class="card-body">
+            <div class="gauge-wrapper">
+              <div class="gauge-container">
+                <svg class="gauge-svg" viewBox="0 0 160 160">
+                  <circle class="gauge-track" cx="80" cy="80" r="70" />
+                  <circle class="gauge-fill" id="gauge-fill-circle" cx="80" cy="80" r="70" />
+                </svg>
+                <div class="gauge-inner-content">
+                  <span class="gauge-value" id="gauge-number">0</span>
+                  <span class="gauge-label">Risk Metric</span>
+                  <span class="gauge-status-badge severity-badge low" id="gauge-status-tag">SAFE</span>
+                </div>
+              </div>
+
+              <!-- Submetrics -->
+              <div class="gauge-submetrics">
+                <div class="submetric-box">
+                  <div class="label">Initial Risk</div>
+                  <div class="value" id="submetric-initial-risk">0</div>
+                </div>
+                <div class="submetric-box">
+                  <div class="label">Choke Cut Impact</div>
+                  <div class="value" id="submetric-choke-impact">0%</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 2: ATTACK PATHS PANEL -->
+        <div class="card col-span-2-desktop col-span-2-tablet" id="section-paths">
+          <div class="card-header">
+            <h2 class="card-title">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Discovered Threat Vectors & Attack Paths
+            </h2>
+            <div class="paths-toolbar">
+              <select class="paths-sort-select" id="paths-sort" onchange="sortAttackPaths(this.value)">
+                <option value="severity">Sort by Severity (High to Low)</option>
+                <option value="hops">Sort by Hop Count</option>
+                <option value="id">Sort by Path ID</option>
+              </select>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="path-list" id="path-list-container">
+              <!-- Skeletons on initial load -->
+              <div class="skeleton" style="height: 60px; margin-bottom: 8px;"></div>
+              <div class="skeleton" style="height: 60px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 3: NETWORK GRAPH VISUALIZATION (VIS.JS INTERACTIVE NODE-LINK DIAGRAM) -->
+        <div class="card col-span-3-desktop col-span-2-tablet graph-card" id="section-graph">
+          <div class="card-header">
+            <h2 class="card-title">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+              </svg>
+              Interactive Attack Topology (Directed Acyclic Flow)
+            </h2>
+            <div class="graph-controls">
+              <button class="btn-graph-tool" onclick="zoomGraph(1.2)" title="Zoom In">+</button>
+              <button class="btn-graph-tool" onclick="zoomGraph(0.8)" title="Zoom Out">−</button>
+              <button class="btn-graph-tool" onclick="fitGraph()" title="Fit View">⛶</button>
+              <button class="btn-graph-tool" onclick="toggleGraphPhysics()" id="btn-physics-toggle" title="Toggle Physics Simulation">⚡</button>
+            </div>
+          </div>
+          <div class="card-body" style="padding: 10px;">
+            <!-- Vis.js container -->
+            <div id="network-container"></div>
+
+            <!-- Mobile fallback view for small screens -->
+            <div class="mobile-graph-fallback" id="mobile-graph-fallback">
+              <!-- Rendered via JS -->
+            </div>
+
+            <!-- Graph Legend -->
+            <div class="graph-legend">
+              <div class="legend-item"><span class="legend-dot" style="background:#EF4444;"></span> Internet Entry</div>
+              <div class="legend-item"><span class="legend-dot" style="background:#F59E0B;"></span> Minimum-Cut Choke Point</div>
+              <div class="legend-item"><span class="legend-dot" style="background:#06B6D4;"></span> Crown Jewel Asset</div>
+              <div class="legend-item"><span class="legend-dot" style="background:#64748B;"></span> Severed / Remediated</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 4: RECENT ACTIVITY / CRYPTOGRAPHIC AUDIT LOG -->
+        <div class="card col-span-2-desktop col-span-2-tablet" id="section-audit">
+          <div class="card-header">
+            <h2 class="card-title">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Recent Activity & Cryptographic Audit Trail
+            </h2>
+            <span class="card-action-btn" id="audit-chain-badge">SHA-256 Verified</span>
+          </div>
+          <div class="card-body" style="padding: 0;">
+            <div class="audit-table-wrapper">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Action</th>
+                    <th>User / Device</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-table-body">
+                  <tr>
+                    <td colspan="4" style="text-align: center; padding: 24px;">
+                      <div class="skeleton" style="height: 20px; width: 80%; margin: 0 auto;"></div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 5: HARDWARE DEVICES PANEL -->
+        <div class="card" id="section-hardware">
+          <div class="card-header">
+            <h2 class="card-title">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Hardware Sentinels
+            </h2>
+            <span class="card-action-btn" onclick="fetchDevicesData()">Poll Now</span>
+          </div>
+          <div class="card-body">
+            <div class="devices-grid" id="devices-container">
+              <!-- Skeletons on initial load -->
+              <div class="skeleton" style="height: 100px; margin-bottom: 8px;"></div>
+              <div class="skeleton" style="height: 100px;"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- =====================================================================
+       VANILLA JAVASCRIPT APPLICATION LOGIC
+       ===================================================================== -->
+  <script>
+    // -------------------------------------------------------------------
+    // 1. CONFIGURATION & STATE
+    // -------------------------------------------------------------------
+    const API_BASE = window.location.origin.includes('5173') 
+      ? 'http://127.0.0.1:8000' 
+      : (window.location.protocol === 'file:' ? 'http://127.0.0.1:8000' : window.location.origin);
+
+    const STATE = {
+      isOnline: false,
+      lastSeq: null,
+      currentRisk: 0,
+      currentStatus: null,
+      paths: [],
+      graphData: null,
+      devices: [],
+      auditEntries: [],
+      scenarios: [],
+      selectedScenario: 'educloud',
+      physicsEnabled: false
+    };
+
+    let visNetworkInstance = null;
+
+    // -------------------------------------------------------------------
+    // 2. REAL-TIME CLOCK
+    // -------------------------------------------------------------------
+    function initRealtimeClock() {
+      const timeEl = document.getElementById('clock-time');
+      const dateEl = document.getElementById('clock-date');
+
+      function update() {
+        const now = new Date();
+        timeEl.textContent = now.toLocaleTimeString([], { hour12: false });
+        dateEl.textContent = now.toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
+      }
+      update();
+      setInterval(update, 1000);
+    }
+
+    // -------------------------------------------------------------------
+    // 3. THEME TOGGLE
+    // -------------------------------------------------------------------
+    function initTheme() {
+      const saved = localStorage.getItem('aegis_theme') || 'dark';
+      document.body.setAttribute('data-theme', saved);
+      updateThemeIcons(saved);
+    }
+
+    function toggleTheme() {
+      const current = document.body.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.body.setAttribute('data-theme', next);
+      localStorage.setItem('aegis_theme', next);
+      updateThemeIcons(next);
+      if (visNetworkInstance) {
+        refreshGraphColors();
+      }
+    }
+
+    function updateThemeIcons(theme) {
+      const moon = document.getElementById('theme-icon-moon');
+      const sun = document.getElementById('theme-icon-sun');
+      if (theme === 'dark') {
+        moon.style.display = 'block';
+        sun.style.display = 'none';
+      } else {
+        moon.style.display = 'none';
+        sun.style.display = 'block';
+      }
+    }
+
+    // Mobile Drawer Toggle
+    function toggleMobileDrawer() {
+      const drawer = document.getElementById('mobile-drawer');
+      const overlay = document.getElementById('drawer-overlay');
+      drawer.classList.toggle('active');
+      overlay.classList.toggle('active');
+    }
+
+    // -------------------------------------------------------------------
+    // 4. CONNECTION ERROR BANNER & STATUS INDICATOR
+    // -------------------------------------------------------------------
+    function setSystemOnline(online) {
+      STATE.isOnline = online;
+      const banner = document.getElementById('connection-banner');
+      const dot = document.getElementById('system-status-dot');
+      const text = document.getElementById('system-status-text');
+
+      if (online) {
+        banner.classList.remove('active');
+        dot.classList.remove('offline');
+        text.textContent = 'ONLINE';
+      } else {
+        banner.classList.add('active');
+        dot.classList.add('offline');
+        text.textContent = 'OFFLINE';
+      }
+    }
+
+    function retryConnectionNow() {
+      fetchStatusData();
+      fetchPathsData();
+      fetchDevicesData();
+      fetchAuditData();
+    }
+
+    // -------------------------------------------------------------------
+    // 5. DATA FETCHING & POLLING
+    // -------------------------------------------------------------------
+
+    // Load available scenarios on startup
+    async function fetchScenarios() {
+      try {
+        const res = await fetch(`${API_BASE}/api/scenarios`);
+        if (!res.ok) return;
+        const data = await res.json();
+        STATE.scenarios = data;
+
+        const sel = document.getElementById('scenario-selector');
+        const mSel = document.getElementById('mobile-scenario-selector');
+        sel.innerHTML = '';
+        mSel.innerHTML = '';
+
+        data.forEach(sc => {
+          const opt = document.createElement('option');
+          opt.value = sc.id;
+          opt.textContent = sc.display_name;
+          sel.appendChild(opt);
+
+          const mOpt = document.createElement('option');
+          mOpt.value = sc.id;
+          mOpt.textContent = sc.display_name;
+          mSel.appendChild(mOpt);
+        });
+
+        if (STATE.selectedScenario) {
+          sel.value = STATE.selectedScenario;
+          mSel.value = STATE.selectedScenario;
+        }
+      } catch (err) {
+        console.warn('Scenarios fetch error:', err);
+      }
+    }
+
+    // Poll /api/status every 2 seconds
+    async function fetchStatusData() {
+      try {
+        const res = await fetch(`${API_BASE}/api/status`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const status = await res.json();
+        setSystemOnline(true);
+
+        const seqChanged = STATE.lastSeq !== null && STATE.lastSeq !== status.seq;
+        const firstLoad = STATE.lastSeq === null;
+        STATE.lastSeq = status.seq;
+        STATE.currentStatus = status;
+
+        if (status.scenario && status.scenario !== STATE.selectedScenario) {
+          STATE.selectedScenario = status.scenario;
+          const sel = document.getElementById('scenario-selector');
+          const mSel = document.getElementById('mobile-scenario-selector');
+          if (sel) sel.value = status.scenario;
+          if (mSel) mSel.value = status.scenario;
+        }
+
+        renderLiveStatusBar(status);
+        updateRiskGauge(status.risk);
+
+        // If status changed or first load, fetch paths
+        if (seqChanged || firstLoad) {
+          fetchPathsData();
+          fetchAuditData();
+        }
+      } catch (err) {
+        setSystemOnline(false);
+      }
+    }
+
+    // Fetch /api/paths on load & status change
+    async function fetchPathsData() {
+      try {
+        const res = await fetch(`${API_BASE}/api/paths`);
+        if (!res.ok) {
+          // Fallback to /api/analysis if /api/paths is not available
+          const alt = await fetch(`${API_BASE}/api/analysis`);
+          if (alt.ok) {
+            const altData = await alt.json();
+            handlePathsResponse({
+              paths: altData.paths || [],
+              graph: altData.graph || { nodes: [], edges: [] },
+              risk: altData.before?.risk || 0,
+              choke_point: altData.choke_point
+            });
+            return;
+          }
+          throw new Error('Paths endpoint error');
+        }
+        const data = await res.json();
+        handlePathsResponse(data);
+      } catch (err) {
+        console.warn('Paths error:', err);
+      }
+    }
+
+    function handlePathsResponse(data) {
+      STATE.paths = data.paths || [];
+      STATE.graphData = data.graph || { nodes: [], edges: [] };
+      renderAttackPaths(STATE.paths);
+      renderNetworkGraph(STATE.graphData);
+      renderMobileGraphList(STATE.graphData);
+    }
+
+    // Poll /api/devices every 10 seconds
+    async function fetchDevicesData() {
+      try {
+        const res = await fetch(`${API_BASE}/api/devices`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const devices = await res.json();
+        STATE.devices = devices;
+        renderHardwareDevices(devices);
+      } catch (err) {
+        console.warn('Devices fetch error:', err);
+        // Show default sentinel device cards
+        renderHardwareDevices([
+          { device_id: 'esp32-console-01', device_type: 'console', online: false, age_s: 99, fw: '1.4.2-sentinel', ip: '192.168.1.105' },
+          { device_id: 'unoq-status-01', device_type: 'status_board', online: false, age_s: 99, fw: '2.0.1-matrix', ip: '192.168.1.112' }
+        ]);
+      }
+    }
+
+    // Poll /api/audit
+    async function fetchAuditData() {
+      try {
+        const res = await fetch(`${API_BASE}/api/audit`);
+        if (!res.ok) return;
+        const data = await res.json();
+        STATE.auditEntries = data.entries || [];
+        renderAuditLog(STATE.auditEntries);
+        const chainBadge = document.getElementById('audit-chain-badge');
+        if (chainBadge) {
+          chainBadge.textContent = data.chain_valid ? 'SHA-256 Validated' : 'Chain Unverified';
+          chainBadge.style.color = data.chain_valid ? '#10B981' : '#EF4444';
+        }
+      } catch (err) {
+        console.warn('Audit fetch error:', err);
+      }
+    }
+
+    // Trigger run analysis
+    async function triggerRunAnalysis(scenarioId) {
+      const sc = scenarioId || STATE.selectedScenario;
+      const btn = document.getElementById('run-analysis-btn');
+      const label = document.getElementById('run-btn-label');
+      btn.disabled = true;
+      label.textContent = 'Analyzing...';
+
+      try {
+        const res = await fetch(`${API_BASE}/api/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenario: sc })
+        });
+        if (res.ok) {
+          await fetchStatusData();
+          await fetchPathsData();
+          await fetchAuditData();
+        }
+      } catch (err) {
+        alert('Could not run analysis: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        label.textContent = 'Run Analysis';
+      }
+    }
+
+    function onScenarioSelectChange(newSc) {
+      STATE.selectedScenario = newSc;
+      const sel = document.getElementById('scenario-selector');
+      const mSel = document.getElementById('mobile-scenario-selector');
+      if (sel) sel.value = newSc;
+      if (mSel) mSel.value = newSc;
+      triggerRunAnalysis(newSc);
+    }
+
+    // -------------------------------------------------------------------
+    // 6. RENDERERS
+    // -------------------------------------------------------------------
+
+    // 6.1 Live Status Bar
+    function renderLiveStatusBar(status) {
+      const bar = document.getElementById('live-status-bar');
+      const badge = document.getElementById('status-bar-badge');
+      const headline = document.getElementById('status-bar-headline');
+      const pathsText = document.getElementById('status-paths-text');
+      const fixesText = document.getElementById('status-fixes-text');
+
+      const state = (status.state || 'safe').toLowerCase();
+      bar.className = `live-status-bar ${state}`;
+
+      if (state === 'safe') {
+        badge.textContent = 'SYSTEM SAFE';
+        headline.textContent = 'Zero Open Threat Vectors — Infrastructure Fully Hardened';
+      } else if (state === 'warning') {
+        badge.textContent = 'WARNING';
+        headline.textContent = `Elevated Cloud Exposure (${status.path_count} Paths Identified)`;
+      } else if (state === 'critical') {
+        badge.textContent = 'CRITICAL ATTACK RISK';
+        headline.textContent = `Immediate Crown Jewel Breach Possible (${status.path_count} Paths)`;
+      } else {
+        badge.textContent = 'UNSAFE ARCHITECTURE';
+        headline.textContent = `Active Privilege Escalation Choke Point Exposed`;
+      }
+
+      pathsText.textContent = `${status.path_count} Attack Path${status.path_count === 1 ? '' : 's'}`;
+      const fixCount = status.pending_fix ? 1 : 0;
+      fixesText.textContent = `${fixCount} Choke Point Fix Pending`;
+    }
+
+    // 6.2 Circular Risk Score Gauge
+    function updateRiskGauge(value) {
+      const circle = document.getElementById('gauge-fill-circle');
+      const numberEl = document.getElementById('gauge-number');
+      const tagEl = document.getElementById('gauge-status-tag');
+      const initialEl = document.getElementById('submetric-initial-risk');
+      const impactEl = document.getElementById('submetric-choke-impact');
+
+      const score = Math.max(0, Math.min(100, Math.round(value || 0)));
+      STATE.currentRisk = score;
+
+      // Animate stroke dashoffset (circumference = 2 * PI * 70 = ~439.82)
+      const circumference = 440;
+      const offset = circumference - (score / 100) * circumference;
+      circle.style.strokeDashoffset = offset;
+
+      // Color coding:
+      // Green: 0-30, Amber: 31-60, Red: 61-80, Dark Red: 81-100
+      let color, statusText, statusClass;
+      if (score <= 30) {
+        color = '#10B981';
+        statusText = 'SAFE';
+        statusClass = 'low';
+      } else if (score <= 60) {
+        color = '#F59E0B';
+        statusText = 'WARNING';
+        statusClass = 'medium';
+      } else if (score <= 80) {
+        color = '#EF4444';
+        statusText = 'UNSAFE';
+        statusClass = 'high';
+      } else {
+        color = '#991B1B';
+        statusText = 'CRITICAL';
+        statusClass = 'critical';
+      }
+
+      circle.style.stroke = color;
+      tagEl.textContent = statusText;
+      tagEl.className = `gauge-status-badge severity-badge ${statusClass}`;
+
+      // Animate number count up
+      animateCounter(numberEl, score);
+
+      initialEl.textContent = score;
+      impactEl.textContent = score > 0 ? '-100%' : '0%';
+    }
+
+    function animateCounter(el, target) {
+      const current = parseInt(el.textContent) || 0;
+      if (current === target) return;
+      const step = target > current ? 1 : -1;
+      let val = current;
+      const timer = setInterval(() => {
+        val += step;
+        el.textContent = val;
+        if (val === target) clearInterval(timer);
+      }, 15);
+    }
+
+    // 6.3 Attack Paths Panel
+    function renderAttackPaths(paths) {
+      const container = document.getElementById('path-list-container');
+      if (!paths || paths.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 32px; color: var(--text-muted);">
+            <svg style="width: 32px; height: 32px; margin: 0 auto 8px; color: #10B981;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <p style="font-weight: 600; color: var(--text-primary); font-size: 14px;">No Open Attack Vectors</p>
+            <p style="font-size: 12px; margin-top: 4px;">All cloud assets protected. Attack paths successfully severed at choke point.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = paths.map((path, idx) => {
+        const sev = (path.severity || 'Medium').toLowerCase();
+        const nodes = path.nodes || [];
+
+        // Build visual chain badges
+        const chainHtml = nodes.map((node, nIdx) => {
+          let nodeClass = '';
+          if (nIdx === 0) nodeClass = 'entry';
+          else if (nIdx === nodes.length - 1) nodeClass = 'crown';
+          else if (node.toLowerCase().includes('choke') || node.toLowerCase().includes('role')) nodeClass = 'choke';
+
+          const arrow = nIdx < nodes.length - 1 ? '<span class="chain-arrow">→</span>' : '';
+          return `<span class="node-badge ${nodeClass}" title="${node}">${node}</span>${arrow}`;
+        }).join('');
+
+        return `
+          <div class="path-item" onclick="togglePathExpand(this)">
+            <div class="path-item-header">
+              <div class="path-item-title">
+                <span class="severity-badge ${sev}">${path.severity || 'Medium'}</span>
+                <span>Threat Vector #${path.id || (idx + 1)}</span>
+              </div>
+              <span style="font-size: 11px; font-weight: 600; color: var(--text-muted); font-family: monospace;">${path.hops || nodes.length - 1} hops</span>
+            </div>
+            <div class="path-chain">
+              ${chainHtml}
+            </div>
+            <div class="path-details">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
+                <div><strong style="color:var(--text-muted)">Difficulty:</strong> ${path.difficulty || 1}/5</div>
+                <div><strong style="color:var(--text-muted)">Risk Impact:</strong> ${path.risk || 75}/100</div>
+                <div><strong style="color:var(--text-muted)">Min-Cut Choke:</strong> ${nodes[1] || 'Severable'}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function togglePathExpand(el) {
+      el.classList.toggle('expanded');
+    }
+
+    function sortAttackPaths(criteria) {
+      const sorted = [...STATE.paths];
+      if (criteria === 'severity') {
+        const order = { critical: 4, high: 3, medium: 2, low: 1 };
+        sorted.sort((a, b) => (order[(b.severity || '').toLowerCase()] || 0) - (order[(a.severity || '').toLowerCase()] || 0));
+      } else if (criteria === 'hops') {
+        sorted.sort((a, b) => (a.hops || a.nodes.length) - (b.hops || b.nodes.length));
+      } else if (criteria === 'id') {
+        sorted.sort((a, b) => (a.id || 0) - (b.id || 0));
+      }
+      renderAttackPaths(sorted);
+    }
+
+    // 6.4 Network Graph Visualization (Vis.js Network)
+    function renderNetworkGraph(graphData) {
+      const container = document.getElementById('network-container');
+      if (!container || !window.vis) return;
+
+      const isDark = document.body.getAttribute('data-theme') !== 'light';
+      const nodesRaw = graphData.nodes || [];
+      const edgesRaw = graphData.edges || [];
+
+      if (nodesRaw.length === 0) {
+        container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">No graph nodes found</div>';
+        return;
+      }
+
+      const visNodes = nodesRaw.map(n => {
+        let bgColor = isDark ? '#1E293B' : '#F1F5F9';
+        let borderColor = isDark ? '#334155' : '#CBD5E1';
+        let fontColor = isDark ? '#F8FAFC' : '#0F172A';
+
+        if (n.entry) {
+          bgColor = '#EF4444';
+          borderColor = '#DC2626';
+          fontColor = '#FFF';
+        } else if (n.choke) {
+          bgColor = '#F59E0B';
+          borderColor = '#D97706';
+          fontColor = '#000';
+        } else if (n.crown_jewel) {
+          bgColor = '#06B6D4';
+          borderColor = '#0891B2';
+          fontColor = '#000';
+        }
+
+        return {
+          id: n.id,
+          label: n.label || n.id,
+          color: {
+            background: bgColor,
+            border: borderColor,
+            highlight: { background: '#0284C7', border: '#38BDF8' }
+          },
+          font: { color: fontColor, size: 12, face: 'Inter', strokeWidth: 0 },
+          shape: 'box',
+          margin: 10,
+          borderWidth: 2,
+          shadow: { enabled: true, color: 'rgba(0,0,0,0.3)', size: 6 }
+        };
+      });
+
+      const visEdges = edgesRaw.map((e, idx) => {
+        const isCritical = e.fixable || e.technique || (idx === 0);
+        return {
+          id: e.id || `e_${idx}`,
+          from: e.source,
+          to: e.target,
+          label: e.technique || e.label || '',
+          font: { color: isDark ? '#94A3B8' : '#64748B', size: 10, align: 'top' },
+          arrows: 'to',
+          color: {
+            color: isCritical ? '#EF4444' : (isDark ? '#475569' : '#94A3B8'),
+            highlight: '#38BDF8'
+          },
+          width: isCritical ? 2.5 : 1.5,
+          smooth: { type: 'cubicBezier', roundness: 0.2 }
+        };
+      });
+
+      const data = {
+        nodes: new vis.DataSet(visNodes),
+        edges: new vis.DataSet(visEdges)
+      };
+
+      const options = {
+        physics: {
+          enabled: STATE.physicsEnabled,
+          solver: 'forceAtlas2Based',
+          forceAtlas2Based: {
+            gravitationalConstant: -50,
+            centralGravity: 0.01,
+            springLength: 120,
+            springConstant: 0.08
+          }
+        },
+        interaction: {
+          hover: true,
+          navigationButtons: false,
+          keyboard: false,
+          zoomView: true,
+          dragView: true
+        },
+        layout: {
+          improvedLayout: true,
+          hierarchical: {
+            enabled: !STATE.physicsEnabled,
+            direction: 'LR',
+            sortMethod: 'directed',
+            nodeSpacing: 140,
+            levelSeparation: 180
+          }
+        }
+      };
+
+      if (visNetworkInstance) {
+        visNetworkInstance.destroy();
+      }
+      visNetworkInstance = new vis.Network(container, data, options);
+    }
+
+    function renderMobileGraphList(graphData) {
+      const fallback = document.getElementById('mobile-graph-fallback');
+      if (!fallback) return;
+
+      const nodes = graphData.nodes || [];
+      if (nodes.length === 0) {
+        fallback.innerHTML = '<p style="color:var(--text-muted);font-size:12px;">No graph nodes to display</p>';
+        return;
+      }
+
+      fallback.innerHTML = nodes.map(n => {
+        let tag = 'Resource';
+        let badgeColor = 'background: rgba(148, 163, 184, 0.2); color: var(--text-primary);';
+        if (n.entry) { tag = 'ENTRY'; badgeColor = 'background: rgba(239, 68, 68, 0.25); color: #FCA5A5; border: 1px solid #EF4444;'; }
+        if (n.choke) { tag = 'CHOKE POINT'; badgeColor = 'background: rgba(245, 158, 11, 0.25); color: #FCD34D; border: 1px solid #F59E0B;'; }
+        if (n.crown_jewel) { tag = 'CROWN JEWEL'; badgeColor = 'background: rgba(6, 182, 212, 0.25); color: #67E8F9; border: 1px solid #06B6D4;'; }
+
+        return `
+          <div class="mobile-node-card">
+            <div>
+              <div style="font-weight: 700; font-size: 13px; color: var(--text-primary);">${n.label || n.id}</div>
+              <div style="font-size: 11px; color: var(--text-muted);">${n.type || 'Cloud Node'}</div>
+            </div>
+            <span style="font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; ${badgeColor}">${tag}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function zoomGraph(factor) {
+      if (!visNetworkInstance) return;
+      const scale = visNetworkInstance.getScale();
+      visNetworkInstance.moveTo({ scale: scale * factor });
+    }
+
+    function fitGraph() {
+      if (!visNetworkInstance) return;
+      visNetworkInstance.fit({ animation: { duration: 500 } });
+    }
+
+    function toggleGraphPhysics() {
+      STATE.physicsEnabled = !STATE.physicsEnabled;
+      const btn = document.getElementById('btn-physics-toggle');
+      btn.style.color = STATE.physicsEnabled ? 'var(--accent-cyan)' : 'var(--text-secondary)';
+      if (STATE.graphData) {
+        renderNetworkGraph(STATE.graphData);
+      }
+    }
+
+    function refreshGraphColors() {
+      if (STATE.graphData) {
+        renderNetworkGraph(STATE.graphData);
+      }
+    }
+
+    // 6.5 Recent Activity / Audit Log Table
+    function renderAuditLog(entries) {
+      const tbody = document.getElementById('audit-table-body');
+      if (!entries || entries.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="4" style="text-align: center; padding: 24px; color: var(--text-muted);">
+              No audit records registered yet
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      // Sort newest on top
+      const sorted = [...entries].sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+      tbody.innerHTML = sorted.slice(0, 25).map(e => {
+        const d = new Date((e.ts || 0) * 1000);
+        const timeStr = d.toLocaleTimeString([], { hour12: false });
+
+        let actionClass = 'scan';
+        const ev = (e.event || '').toLowerCase();
+        if (ev.includes('approve') || ev.includes('fix')) actionClass = 'approve';
+        else if (ev.includes('reject') || ev.includes('remove')) actionClass = 'reject';
+        else if (ev.includes('run') || ev.includes('analy')) actionClass = 'fix';
+
+        let userStr = e.device_id || e.card_id || 'System Sentinel';
+        let detailStr = '';
+        if (e.scenario) detailStr = `Analyzed scenario ${e.scenario} (Risk: ${e.risk || 0})`;
+        else if (e.name) detailStr = `Badge enrolled: ${e.name}`;
+        else if (e.this_hash) detailStr = `Verified Hash: ${e.this_hash.slice(0, 12)}...`;
+        else detailStr = JSON.stringify(e).slice(0, 60);
+
+        return `
+          <tr>
+            <td style="font-family: 'JetBrains Mono', monospace; font-size: 11px;">${timeStr}</td>
+            <td><span class="audit-action-pill ${actionClass}">${e.event || 'event'}</span></td>
+            <td style="font-weight: 600; color: var(--text-primary);">${userStr}</td>
+            <td style="color: var(--text-muted); font-size: 11px;">${detailStr}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // 6.6 Hardware Devices Panel
+    function renderHardwareDevices(devices) {
+      const container = document.getElementById('devices-container');
+      if (!devices || devices.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px;">
+            No hardware devices enrolled
+          </div>
+        `;
+        return;
+      }
+
+      // Render preset/live devices
+      container.innerHTML = devices.map(d => {
+        const isOnline = d.online === true;
+        const statusClass = isOnline ? 'online' : 'offline';
+        const statusText = isOnline ? 'Online' : 'Offline';
+        const ageText = isOnline ? (d.age_s ? `${d.age_s}s ago` : 'Just now') : 'Unreachable';
+
+        const name = d.device_id.includes('esp32') ? 'ESP32 Console' : (d.device_id.includes('unoq') ? 'UNO Q Status Board' : d.device_id);
+
+        return `
+          <div class="device-card">
+            <div class="device-header">
+              <span class="device-name">
+                <svg style="width: 15px; height: 15px; color: var(--accent-cyan);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                ${name}
+              </span>
+              <span class="device-status-badge ${statusClass}">
+                <span class="status-dot ${statusClass}" style="width: 6px; height: 6px;"></span>
+                ${statusText}
+              </span>
+            </div>
+            <div class="device-details-list">
+              <div class="device-detail-item">
+                <span class="key">Heartbeat</span>
+                <span class="val">${ageText}</span>
+              </div>
+              <div class="device-detail-item">
+                <span class="key">Firmware</span>
+                <span class="val">${d.fw || 'v1.4.2'}</span>
+              </div>
+              <div class="device-detail-item">
+                <span class="key">IP Address</span>
+                <span class="val">${d.ip || d.remote_ip || '192.168.1.100'}</span>
+              </div>
+              <div class="device-detail-item">
+                <span class="key">Device ID</span>
+                <span class="val" style="font-size: 10px;">${d.device_id}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // -------------------------------------------------------------------
+    // 7. INITIALIZATION & TIMERS
+    // -------------------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      initRealtimeClock();
+      fetchScenarios();
+
+      // Initial data load
+      fetchStatusData();
+      fetchPathsData();
+      fetchDevicesData();
+      fetchAuditData();
+
+      // Polling per spec:
+      // Poll /api/status every 2 seconds
+      setInterval(fetchStatusData, 2000);
+
+      // Poll /api/devices every 10 seconds
+      setInterval(fetchDevicesData, 10000);
+
+      // Poll audit log every 5 seconds
+      setInterval(fetchAuditData, 5000);
+    });
+  </script>
+</body>
+</html>

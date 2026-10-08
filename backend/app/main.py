@@ -43,18 +43,31 @@ app.include_router(device_router)
 app.include_router(dashboard_router)
 
 # Frontend static serving and SPA fallback
-FRONTEND_DIST = (Path(__file__).resolve().parent.parent.parent / "frontend" / "dist").resolve()
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+FRONTEND_DIST = (ROOT_DIR / "frontend" / "dist").resolve()
+DASHBOARD_FILE = (ROOT_DIR / "dashboard.html").resolve()
 
 # If assets dir exists, mount it
 assets_dir = FRONTEND_DIST / "assets"
 if assets_dir.is_dir():
     app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
+@app.get("/dashboard")
+@app.get("/dashboard.html")
+async def serve_dashboard():
+    if DASHBOARD_FILE.is_file():
+        return FileResponse(str(DASHBOARD_FILE))
+    return JSONResponse(status_code=404, content={"error": "dashboard_not_found"})
+
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
     # Never intercept /api
     if full_path.startswith("api/") or full_path == "api":
         return JSONResponse(status_code=404, content={"error": "not_found"})
+
+    if full_path in ("dashboard", "dashboard.html"):
+        if DASHBOARD_FILE.is_file():
+            return FileResponse(str(DASHBOARD_FILE))
 
     if FRONTEND_DIST.exists():
         target = FRONTEND_DIST / full_path
