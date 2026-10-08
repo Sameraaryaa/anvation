@@ -1,0 +1,231 @@
+{
+  "scenario": "educloud",
+  "display_name": "EduCloud (synthetic ed-tech stack)",
+  "entry_points": [
+    "internet"
+  ],
+  "crown_jewels": [
+    "db_parent_portal"
+  ],
+  "nodes": [
+    {
+      "id": "internet",
+      "type": "internet",
+      "label": "Internet",
+      "exposed": true,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "web_app",
+      "type": "compute",
+      "label": "Public Web App",
+      "exposed": false,
+      "public": true,
+      "misconfig": [
+        "sg_open_world"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "code_runner",
+      "type": "compute",
+      "label": "Code Runner",
+      "exposed": false,
+      "public": true,
+      "misconfig": [
+        "weak_sandbox"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "leaked_key",
+      "type": "credential",
+      "label": "Leaked AI Key",
+      "exposed": false,
+      "public": false,
+      "misconfig": [
+        "key_in_client_code"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "role_overpriv",
+      "type": "role",
+      "label": "Over-privileged Role",
+      "exposed": false,
+      "public": false,
+      "misconfig": [
+        "passrole_wildcard"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": "edu-app-role"
+    },
+    {
+      "id": "role_admin",
+      "type": "role",
+      "label": "Admin Role",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": "admin",
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "db_parent_portal",
+      "type": "data",
+      "label": "Parent-Portal DB",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": "children_pii",
+      "crown_jewel": true,
+      "value": 10,
+      "name_ref": null
+    },
+    {
+      "id": "file_storage",
+      "type": "data",
+      "label": "File Storage",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": "uploads",
+      "crown_jewel": false,
+      "value": 4,
+      "name_ref": null
+    }
+  ],
+  "edges": [
+    {
+      "from": "internet",
+      "to": "web_app",
+      "type": "EXPOSED_TO_INTERNET",
+      "technique": "T1190",
+      "difficulty": 2,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "internet",
+      "to": "code_runner",
+      "type": "EXPOSED_TO_INTERNET",
+      "technique": "T1190",
+      "difficulty": 2,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "internet",
+      "to": "leaked_key",
+      "type": "EXPOSED_CREDENTIAL",
+      "technique": "T1552.001",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "web_app",
+      "to": "role_overpriv",
+      "type": "METADATA_ACCESS",
+      "technique": "T1552.005",
+      "difficulty": 3,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "code_runner",
+      "to": "role_overpriv",
+      "type": "SANDBOX_ESCAPE",
+      "technique": "T1611",
+      "difficulty": 3,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "leaked_key",
+      "to": "role_overpriv",
+      "type": "VALID_CREDENTIAL",
+      "technique": "T1078.004",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "role_overpriv",
+      "to": "role_admin",
+      "type": "CAN_PASS_ROLE",
+      "technique": "T1098.001",
+      "difficulty": 2,
+      "fixable": true,
+      "fix": "scope_passrole"
+    },
+    {
+      "from": "role_admin",
+      "to": "db_parent_portal",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "role_admin",
+      "to": "file_storage",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    }
+  ],
+  "remediations": {
+    "scope_passrole": {
+      "title": "Scope the PassRole permission on edu-app-role",
+      "detail": "Restrict iam:PassRole from '*' to a single approved role ARN.",
+      "removes_edges": [
+        [
+          "role_overpriv",
+          "role_admin"
+        ]
+      ],
+      "iam_before": {
+        "Effect": "Allow",
+        "Action": "iam:PassRole",
+        "Resource": "*"
+      },
+      "iam_after": {
+        "Effect": "Allow",
+        "Action": "iam:PassRole",
+        "Resource": "arn:aws:iam::ACCOUNT:role/edu-worker-restricted"
+      },
+      "terraform_after": "resource \"aws_iam_role_policy\" \"edu_app\" { # PassRole scoped to edu-worker-restricted only }",
+      "rego": "deny[msg] { input.Action == \"iam:PassRole\"; input.Resource == \"*\"; msg := \"PassRole must not use wildcard\" }"
+    }
+  }
+}

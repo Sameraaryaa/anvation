@@ -1,0 +1,145 @@
+{
+  "scenario": "custom_cloud_stack",
+  "display_name": "Custom Synthetic Cloud Stack",
+  "entry_points": [
+    "internet"
+  ],
+  "crown_jewels": [
+    "customer_db"
+  ],
+  "nodes": [
+    {
+      "id": "internet",
+      "type": "internet",
+      "label": "Public Internet",
+      "exposed": true,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "api_gateway",
+      "type": "compute",
+      "label": "Public API Gateway",
+      "exposed": false,
+      "public": true,
+      "misconfig": [
+        "unauthenticated_route"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "backend_lambda",
+      "type": "compute",
+      "label": "Data Processor Lambda",
+      "exposed": false,
+      "public": false,
+      "misconfig": [
+        "env_var_creds"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "role_db_admin",
+      "type": "role",
+      "label": "RDS Admin Role",
+      "exposed": false,
+      "public": false,
+      "misconfig": [
+        "full_rds_access"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "customer_db",
+      "type": "data",
+      "label": "Customer DB (Postgres)",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": "pii",
+      "crown_jewel": true,
+      "value": 10,
+      "name_ref": null
+    }
+  ],
+  "edges": [
+    {
+      "from": "internet",
+      "to": "api_gateway",
+      "type": "HTTP_TRAFFIC",
+      "technique": "T1190",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "api_gateway",
+      "to": "backend_lambda",
+      "type": "INVOKE_FUNCTION",
+      "technique": "T1059",
+      "difficulty": 2,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "backend_lambda",
+      "to": "role_db_admin",
+      "type": "ASSUME_ROLE",
+      "technique": "T1078.004",
+      "difficulty": 2,
+      "fixable": true,
+      "fix": "restrict_lambda_role"
+    },
+    {
+      "from": "role_db_admin",
+      "to": "customer_db",
+      "type": "SQL_CONNECT",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    }
+  ],
+  "remediations": {
+    "restrict_lambda_role": {
+      "title": "Revoke RDS Admin AssumeRole from Lambda",
+      "detail": "Restrict Lambda execution role to read-only replica with scoped KMS permissions.",
+      "removes_edges": [
+        [
+          "backend_lambda",
+          "role_db_admin"
+        ]
+      ],
+      "iam_before": {
+        "Effect": "Allow",
+        "Action": "sts:AssumeRole",
+        "Resource": "*"
+      },
+      "iam_after": {
+        "Effect": "Deny",
+        "Action": "sts:AssumeRole",
+        "Resource": "arn:aws:iam::ACCOUNT:role/RDSAdmin"
+      },
+      "terraform_after": "resource \"aws_iam_role_policy\" \"lambda_safe\" {\n  name = \"lambda-least-privilege\"\n}",
+      "rego": "deny[msg] { input.Action == \"sts:AssumeRole\"; input.Resource == \"*\"; msg := \"Wildcard AssumeRole forbidden\" }"
+    }
+  }
+}

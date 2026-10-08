@@ -1,0 +1,121 @@
+{
+  "scenario": "cloudgoat_rce_web_app",
+  "display_name": "CloudGoat: RCE Web App to RDS (Rhino Security)",
+  "entry_points": [
+    "iam_user_lara",
+    "iam_user_mcduck"
+  ],
+  "crown_jewels": [
+    "rds_secret_database"
+  ],
+  "nodes": [
+    {
+      "id": "iam_user_lara",
+      "type": "user",
+      "label": "IAM User Lara",
+      "exposed": true
+    },
+    {
+      "id": "iam_user_mcduck",
+      "type": "user",
+      "label": "IAM User McDuck",
+      "exposed": true
+    },
+    {
+      "id": "s3_internal_bucket",
+      "type": "data",
+      "label": "S3 Internal Bucket (SSH Keys)",
+      "misconfig": [
+        "unencrypted_keys_stored"
+      ]
+    },
+    {
+      "id": "web_app_ec2",
+      "type": "compute",
+      "label": "EC2 Web App (RCE Vulnerable)",
+      "public": true,
+      "misconfig": [
+        "rce_code_injection"
+      ]
+    },
+    {
+      "id": "role_db_access",
+      "type": "role",
+      "label": "IAM Role db-accessor",
+      "misconfig": [
+        "overprivileged_rds_connect"
+      ]
+    },
+    {
+      "id": "rds_secret_database",
+      "type": "data",
+      "label": "RDS Production Secret Database",
+      "sensitivity": "financial_secrets",
+      "crown_jewel": true,
+      "value": 10
+    }
+  ],
+  "edges": [
+    {
+      "from": "iam_user_lara",
+      "to": "web_app_ec2",
+      "type": "EXPLOIT_RCE",
+      "technique": "T1210",
+      "difficulty": 2
+    },
+    {
+      "from": "iam_user_mcduck",
+      "to": "s3_internal_bucket",
+      "type": "S3_READ_OBJECT",
+      "technique": "T1530",
+      "difficulty": 1
+    },
+    {
+      "from": "s3_internal_bucket",
+      "to": "web_app_ec2",
+      "type": "STOLEN_SSH_KEYS",
+      "technique": "T1552.001",
+      "difficulty": 1
+    },
+    {
+      "from": "web_app_ec2",
+      "to": "role_db_access",
+      "type": "ASSUME_ROLE",
+      "technique": "T1078.004",
+      "difficulty": 2,
+      "fixable": true,
+      "fix": "isolate_rds_role"
+    },
+    {
+      "from": "role_db_access",
+      "to": "rds_secret_database",
+      "type": "SQL_CONNECT_EXFIL",
+      "technique": "T1530",
+      "difficulty": 1
+    }
+  ],
+  "remediations": {
+    "isolate_rds_role": {
+      "title": "Sever Web App Role Assumption to RDS Role",
+      "detail": "Remove sts:AssumeRole for role_db_access from EC2 instance profile, enforcing zero-trust database isolation.",
+      "removes_edges": [
+        [
+          "web_app_ec2",
+          "role_db_access"
+        ]
+      ],
+      "iam_before": {
+        "Effect": "Allow",
+        "Action": "sts:AssumeRole",
+        "Resource": "arn:aws:iam::ACCOUNT:role/db-accessor"
+      },
+      "iam_after": {
+        "Effect": "Deny",
+        "Action": "sts:AssumeRole",
+        "Resource": "arn:aws:iam::ACCOUNT:role/db-accessor"
+      },
+      "terraform_after": "resource \"aws_iam_role_policy\" \"ec2_deny_rds\" {\n  name   = \"ec2-block-rds-assume\"\n  role   = aws_iam_role.web_app.id\n  policy = jsonencode({\n    Version = \"2012-10-17\"\n    Statement = [{\n      Effect   = \"Deny\"\n      Action   = \"sts:AssumeRole\"\n      Resource = \"arn:aws:iam::*:role/db-accessor\"\n    }]\n  })\n}",
+      "rego": "package aws.iam\n\ndeny[msg] {\n  input.Action == \"sts:AssumeRole\"\n  contains(input.Resource, \"db-accessor\")\n  input.Effect == \"Allow\"\n  msg := \"EC2 web workloads cannot assume database accessor role directly\"\n}"
+    }
+  }
+}

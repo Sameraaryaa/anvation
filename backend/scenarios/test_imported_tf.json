@@ -1,0 +1,127 @@
+{
+  "scenario": "test_imported_tf",
+  "display_name": "Test Terraform Architecture",
+  "entry_points": [
+    "internet"
+  ],
+  "crown_jewels": [
+    "prod_database_backup"
+  ],
+  "nodes": [
+    {
+      "id": "internet",
+      "type": "internet",
+      "label": "Internet",
+      "exposed": true,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "app_role",
+      "type": "role",
+      "label": "Role: app_role",
+      "exposed": false,
+      "public": false,
+      "misconfig": [
+        "overprivileged_policy"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "web_server",
+      "type": "compute",
+      "label": "EC2: web_server",
+      "exposed": false,
+      "public": true,
+      "misconfig": [
+        "exposed_service",
+        "unrestricted_metadata"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "prod_database_backup",
+      "type": "data",
+      "label": "S3: prod_database_backup",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": "confidential_data",
+      "crown_jewel": true,
+      "value": 10,
+      "name_ref": null
+    }
+  ],
+  "edges": [
+    {
+      "from": "internet",
+      "to": "web_server",
+      "type": "EXPOSED_TO_INTERNET",
+      "technique": "T1190",
+      "difficulty": 2,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "web_server",
+      "to": "app_role",
+      "type": "INSTANCE_PROFILE_CREDS",
+      "technique": "T1078.004",
+      "difficulty": 2,
+      "fixable": true,
+      "fix": "scope_iam_permissions"
+    },
+    {
+      "from": "app_role",
+      "to": "prod_database_backup",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    }
+  ],
+  "remediations": {
+    "scope_iam_permissions": {
+      "title": "Least-Privilege Scoping on Terraform Resources",
+      "detail": "Restrict broad policies to explicit resource ARNs (prod_database_backup) and enforce IMDSv2 session tokens.",
+      "removes_edges": [
+        [
+          "web_server",
+          "app_role"
+        ]
+      ],
+      "iam_before": {
+        "Effect": "Allow",
+        "Action": [
+          "s3:*",
+          "rds:*"
+        ],
+        "Resource": "*"
+      },
+      "iam_after": {
+        "Effect": "Allow",
+        "Action": [
+          "s3:GetObject"
+        ],
+        "Resource": "arn:aws:s3:::prod_database_backup/*"
+      },
+      "terraform_after": "resource \"aws_iam_role_policy\" \"remediated\" {\n  name = \"least-privilege-policy\"\n  policy = jsonencode({\n    Version = \"2012-10-17\"\n    Statement = [{\n      Effect = \"Allow\"\n      Action = [\"s3:GetObject\"]\n      Resource = \"arn:aws:s3:::prod_database_backup/*\"\n    }]\n  })\n}",
+      "rego": "package aws.iam\ndeny[msg] {\n  input.Action == \"*\"\n  msg := \"Wildcard actions prohibited in production Terraform\"\n}"
+    }
+  }
+}

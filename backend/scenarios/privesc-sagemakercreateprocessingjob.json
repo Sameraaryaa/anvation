@@ -1,0 +1,145 @@
+{
+  "scenario": "privesc-sagemakercreateprocessingjob",
+  "display_name": "Terraform: privesc-sageMakerCreateProcessingJob",
+  "entry_points": [
+    "internet"
+  ],
+  "crown_jewels": [
+    "target_cloud_asset"
+  ],
+  "nodes": [
+    {
+      "id": "internet",
+      "type": "internet",
+      "label": "Internet",
+      "exposed": true,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "privesc-sagemakercreateprocessingjobpassrole-policy",
+      "type": "role",
+      "label": "Role: privesc-sageMakerCreateProcessingJobPassRole-policy",
+      "exposed": false,
+      "public": false,
+      "misconfig": [
+        "overprivileged_policy"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "privesc-sagemakercreateprocessingjobpassrole-role",
+      "type": "role",
+      "label": "Role: privesc-sageMakerCreateProcessingJobPassRole-role",
+      "exposed": false,
+      "public": false,
+      "misconfig": [
+        "overprivileged_policy"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "privesc-sagemakercreateprocessingjobpassrole-user",
+      "type": "role",
+      "label": "Role: privesc-sageMakerCreateProcessingJobPassRole-user",
+      "exposed": false,
+      "public": false,
+      "misconfig": [
+        "overprivileged_policy"
+      ],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "target_cloud_asset",
+      "type": "data",
+      "label": "Protected Cloud Asset",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": true,
+      "value": 10,
+      "name_ref": null
+    }
+  ],
+  "edges": [
+    {
+      "from": "internet",
+      "to": "privesc-sagemakercreateprocessingjobpassrole-policy",
+      "type": "EXPOSED_CREDENTIAL",
+      "technique": "T1552",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "privesc-sagemakercreateprocessingjobpassrole-policy",
+      "to": "target_cloud_asset",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "privesc-sagemakercreateprocessingjobpassrole-role",
+      "to": "target_cloud_asset",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "privesc-sagemakercreateprocessingjobpassrole-user",
+      "to": "target_cloud_asset",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    }
+  ],
+  "remediations": {
+    "remediate_privesc_sagemakercreateprocessingjob": {
+      "title": "Sever Attack Path: privesc-sagemakercreateprocessingjobpassrole-policy -> target_cloud_asset",
+      "detail": "Automated least-privilege scoping revoking unauthorized path between privesc-sagemakercreateprocessingjobpassrole-policy and target_cloud_asset.",
+      "removes_edges": [
+        [
+          "privesc-sagemakercreateprocessingjobpassrole-policy",
+          "target_cloud_asset"
+        ]
+      ],
+      "iam_before": {
+        "Effect": "Allow",
+        "Action": "*",
+        "Resource": "*"
+      },
+      "iam_after": {
+        "Effect": "Deny",
+        "Action": "*",
+        "Resource": "arn:aws:::resource/target_cloud_asset"
+      },
+      "terraform_after": "# AEGIS Auto-Remediation\n# Severed privesc-sagemakercreateprocessingjobpassrole-policy -> target_cloud_asset\n",
+      "rego": "package aegis.policy\ndeny[msg] { input.target == \"target_cloud_asset\"; msg := \"Path severed\" }"
+    }
+  }
+}

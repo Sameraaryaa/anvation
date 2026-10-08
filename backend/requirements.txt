@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+networkx>=3.2
+pydantic>=2
+pydantic-settings
+python-dotenv
+google-genai
+google-cloud-firestore
+pytest
+httpx

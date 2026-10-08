@@ -1,0 +1,122 @@
+{
+  "scenario": "live_test_scenario",
+  "display_name": "Live Test Architecture",
+  "entry_points": [
+    "internet"
+  ],
+  "crown_jewels": [
+    "my_bucket"
+  ],
+  "nodes": [
+    {
+      "id": "internet",
+      "type": "internet",
+      "label": "Internet",
+      "exposed": true,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "my_role",
+      "type": "role",
+      "label": "Role: my_role",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "my_ec2",
+      "type": "compute",
+      "label": "EC2: my_ec2",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": null,
+      "crown_jewel": false,
+      "value": null,
+      "name_ref": null
+    },
+    {
+      "id": "my_bucket",
+      "type": "data",
+      "label": "S3: my_bucket",
+      "exposed": false,
+      "public": false,
+      "misconfig": [],
+      "privilege": null,
+      "sensitivity": "confidential_data",
+      "crown_jewel": true,
+      "value": 10,
+      "name_ref": null
+    }
+  ],
+  "edges": [
+    {
+      "from": "internet",
+      "to": "my_ec2",
+      "type": "EXPOSED_TO_INTERNET",
+      "technique": "T1190",
+      "difficulty": 2,
+      "fixable": false,
+      "fix": null
+    },
+    {
+      "from": "my_ec2",
+      "to": "my_role",
+      "type": "INSTANCE_PROFILE_CREDS",
+      "technique": "T1078.004",
+      "difficulty": 2,
+      "fixable": true,
+      "fix": "scope_iam_permissions"
+    },
+    {
+      "from": "my_role",
+      "to": "my_bucket",
+      "type": "CAN_READ_DATA",
+      "technique": "T1530",
+      "difficulty": 1,
+      "fixable": false,
+      "fix": null
+    }
+  ],
+  "remediations": {
+    "scope_iam_permissions": {
+      "title": "Least-Privilege Scoping on Terraform Resources",
+      "detail": "Restrict broad S3/RDS policies to explicit resource ARNs and enforce IMDSv2 session tokens.",
+      "removes_edges": [
+        [
+          "my_ec2",
+          "my_role"
+        ]
+      ],
+      "iam_before": {
+        "Effect": "Allow",
+        "Action": [
+          "s3:*",
+          "rds:*"
+        ],
+        "Resource": "*"
+      },
+      "iam_after": {
+        "Effect": "Allow",
+        "Action": [
+          "s3:GetObject"
+        ],
+        "Resource": "arn:aws:s3:::my_bucket/*"
+      },
+      "terraform_after": "resource \"aws_iam_role_policy\" \"remediated\" {\n  name = \"least-privilege-policy\"\n  policy = jsonencode({\n    Version = \"2012-10-17\"\n    Statement = [{\n      Effect = \"Allow\"\n      Action = [\"s3:GetObject\"]\n      Resource = \"arn:aws:s3:::my_bucket/*\"\n    }]\n  })\n}",
+      "rego": "package aws.iam\ndeny[msg] {\n  input.Action == \"*\"\n  msg := \"Wildcard actions prohibited in production Terraform\"\n}"
+    }
+  }
+}
